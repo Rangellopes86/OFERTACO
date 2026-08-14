@@ -1,63 +1,125 @@
-const express = require('express');
-const path = require('path');
-const app = express();
-app.use(express.json());
-app.use(express.static(path.join(__dirname,'public')));
+const express = require("express");
 
-function extractItemId(url){
-  const patterns=[
-    /\/p\/(MLB\d{6,})/i,
-    /\b(MLB\d{6,})\b/i
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(express.json());
+app.use(express.static(__dirname));
+
+async function resolverLink(url) {
+  const resposta = await fetch(url, {
+    redirect: "follow",
+    headers: {
+      "User-Agent": "Mozilla/5.0"
+    }
+  });
+
+  return resposta.url;
+}
+
+function encontrarId(url) {
+  const texto = String(url);
+
+  const encontrados = [
+    texto.match(/MLB-?(\d{6,})/i),
+    texto.match(/\/p\/(MLB\d{6,})/i),
+    texto.match(/[?&]item_id=(MLB\d{6,})/i)
   ];
-  for(const p of patterns){const m=url.match(p); if(m) return m[1].toUpperCase();}
+
+  for (const resultado of encontrados) {
+    if (resultado) {
+      const numeros = resultado[1].replace(/\D/g, "");
+      if (numeros) return "MLB" + numeros;
+    }
+  }
+
   return null;
 }
 
-async function resolveUrl(input){
-  const r=await fetch(input,{redirect:'manual',headers:{'user-agent':'Mozilla/5.0'}});
-  const loc=r.headers.get('location');
-  if(loc) return new URL(loc,input).href;
-  if(r.status>=300 && r.status<400) throw new Error('Redirecionamento sem destino');
-  return input;
-}
+app.post("/api/product", async (req, res) => {
+  try {
+    const link = String(req.body?.url || "").trim();
 
-async function resolveChain(input){
-  let current=input;
-  for(let i=0;i<5;i++){
-    const next=await resolveUrl(current);
-    if(next===current) return current;
-    current=next;
-  }
-  return current;
-}
-
-app.post('/api/offer', async(req,res)=>{
-  try{
-    const {url}=req.body||{};
-    if(!url) return res.status(400).json({error:'Cole um link.'});
-    let finalUrl=await resolveChain(url.trim());
-    let id=extractItemId(finalUrl);
-    if(!id){
-      // Alguns links de produto usam /MLB-...; tente também um endpoint de short URL do ML.
-      const rr=await fetch('https://api.mercadolibre.com/sites/MLB/search?q='+encodeURIComponent(finalUrl));
-      if(rr.ok){const data=await rr.json(); if(data.results?.[0]?.id) id=data.results[0].id;}
+    if (!link) {
+      return res.status(400).json({
+        error: "Cole o link do Mercado Livre."
+      });
     }
-    if(!id) return res.status(422).json({error:'Não consegui identificar o anúncio depois de resolver o link.',finalUrl});
-    const itemR=await fetch('https://api.mercadolibre.com/items/'+id);
-    if(!itemR.ok) throw new Error('Mercado Livre não retornou o anúncio.');
-    const item=await itemR.json();
-    let old=item.original_price && Number(item.original_price)>Number(item.price)?Number(item.original_price):null;
-    let actual=Number(item.price||0);
-    try{
-      const pr=await fetch('https://api.mercadolibre.com/items/'+id+'/prices');
-      if(pr.ok){const data=await pr.json(); const promos=(data.prices||[]).filter(x=>x.type==='promotion'&&x.regular_amount&&Number(x.amount)>0); if(promos.length){const p=promos.find(x=>Number(x.amount)===actual)||promos[0]; actual=Number(p.amount); old=Number(p.regular_amount);}}
-    }catch{}
-    const image=item.pictures?.[0]?.url||item.thumbnail||'';
-    const discount=old&&old>actual?Math.round((1-actual/old)*100):0;
-    res.json({id,finalUrl,title:item.title,image,actual,old,discount});
-  }catch(e){res.status(500).json({error:e.message||'Erro inesperado'});}
+
+    const linkFinal = await resolverLink(link);
+
+    console.log("Link original:", link);
+    console.log("Link final:", linkFinal);
+
+    const idProduto = encontrarId(linkFinal);
+
+    if (!idProduto) {
+      return res.status(422).json({
+        error: "Não consegui identificar o anúncio nesse link.",
+        finalUrl: linkFinal
+      });
+    }
+
+    const respostaProduto = await fetch(
+      `https://api.mercadolibre.com/items/${idProduto}`
+    );
+
+    if (!respostaProduto.ok) {
+      return res.status(502).json({
+        error: "O Mercado Livre não retornou os dados desse produto."
+      });
+    }
+
+    const produto = await respostaProduto.json();
+
+    const preco = Number(produto.price || 0);
+
+    const precoAnterior =
+      produto.original_price &&
+      Number(produto.original_price) > preco
+        ? Number(produto.original_price)
+        : null;
+
+    const desconto = precoAnterior
+      ? Math.round((1 - preco / precoAnterior) * 100)
+      : 0;
+
+    const imagem =
+      produto.pictures?.[0]?.secure_url ||
+      produto.pictures?.[0]?.url ||
+      produto.thumbnail ||
+      "";
+
+    res.json({
+      id: produto.id,
+      titulo: produto.title,
+      preco,
+      precoAnterior,
+      desconto,
+      imagem,
+      linkAfiliado: link,
+      linkFinal
+    });
+
+  } catch (erro) {
+    console.error("ERRO:", erro);
+
+    res.status(500).json({
+      error: "Não foi possível consultar esse link.",
+      detalhe: erro.message
+    });
+  }
 });
 
-app.get('*',(req,res)=>res.sendFile(path.join(__dirname,'public','index.html')));
-const PORT=process.env.PORT||3000;
-app.listen(PORT,()=>console.log('Ofertão rodando na porta '+PORT));
+/*
+  Express 5 não aceita app.get("*").
+  Usamos uma expressão regular para encaminhar
+  as páginas para o index.html.
+*/
+app.get(/.*/, (req, res) => {
+  res.sendFile(__dirname + "/index.html");
+});
+
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`Ofertaco iniciado na porta ${PORT}`);
+});
