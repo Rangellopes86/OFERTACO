@@ -1,5 +1,469 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ofertão</title><style>body{font-family:Arial;margin:0;background:#f3f4f6;color:#111}.app{max-width:760px;margin:auto;padding:16px}.card{background:#fff;padding:18px;border-radius:18px;margin:14px 0;box-shadow:0 3px 14px #0001}input,select,textarea{width:100%;box-sizing:border-box;padding:12px;margin:7px 0 12px;border:1px solid #ddd;border-radius:10px;font-size:16px}button{width:100%;padding:13px;border:0;border-radius:10px;font-weight:bold;margin-top:8px;background:#111;color:#fff}.hide{display:none}.product img{width:100%;max-height:320px;object-fit:contain}.price{font-size:28px;font-weight:bold}.old{text-decoration:line-through;color:#888}.ok{padding:10px;background:#e8f7ee;border-radius:10px}.err{padding:10px;background:#ffecec;border-radius:10px}.muted{color:#666;font-size:13px}</style></head><body><div class="app"><div class="card"><h1>🔥 Ofertão</h1><p class="muted">Cole seu link de afiliado do Mercado Livre, inclusive meli.la.</p><input id="url" placeholder="https://meli.la/..."/><select id="model"><option value="full">WhatsApp completa</option><option value="short">WhatsApp curta</option><option value="story">Instagram/Story</option></select><input id="coupon" placeholder="Cupom (opcional)"/><input id="note" placeholder="Observação (opcional)"/><button onclick="generate()">🚀 GERAR OFERTA</button><div id="status" class="muted"></div></div><div id="product" class="card hide"><img id="img"><h2 id="title"></h2><div id="price"></div><b id="off"></b></div><div id="result" class="card hide"><textarea id="text"></textarea><button onclick="copyText()">📋 COPIAR OFERTA</button><button onclick="shareText()">📲 COMPARTILHAR</button></div></div><script>
-const $=id=>document.getElementById(id); const money=n=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(n);
-async function generate(){const url=$('url').value.trim(); if(!url){$('status').textContent='Cole um link.';return} $('status').textContent='Resolvendo o link e buscando o produto...'; try{const r=await fetch('/api/offer',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url})});const d=await r.json();if(!r.ok)throw new Error(d.error||'Não foi possível gerar'); $('img').src=d.image;$('title').textContent=d.title;$('price').innerHTML=d.old?`<span class="old">${money(d.old)}</span> → <span class="price">${money(d.actual)}</span>`:`<span class="price">${money(d.actual)}</span>`;$('off').textContent=d.discount?d.discount+'% OFF':'';let c=$('coupon').value.trim(),n=$('note').value.trim(),m=$('model').value,pl=d.old?`💰 De ${money(d.old)} por *${money(d.actual)}*`:`💰 Por apenas *${money(d.actual)}*`,di=d.discount?`🔥 *${d.discount}% OFF*`:'';let cu=c?`🎟️ *CUPOM:* ${c}`:'',no=n?`📌 ${n}`:'';let t=m==='short'?`🔥 *OFERTA!*\n\n🛍️ ${d.title}\n${pl}\n${di}\n${cu}\n${no}\n\n👉 ${url}`:m==='story'?`🔥 OFERTA DO DIA!\n\n🛍️ ${d.title}\n${pl}\n${di}\n${cu}\n${no}\n\n👉 COMPRE AQUI:\n${url}`:`🔥 *OFERTA DO DIA!*\n\n🛍️ *${d.title}*\n\n${pl}\n${di}\n${cu}\n${no}\n\n👉 *APROVEITE AQUI:*\n${url}\n\n⚠️ Preço e disponibilidade podem mudar sem aviso.`;$('text').value=t.replace(/\n{3,}/g,'\n\n').trim();$('product').classList.remove('hide');$('result').classList.remove('hide');$('status').className='ok';$('status').textContent='Oferta gerada com sucesso!'}catch(e){$('status').className='err';$('status').textContent=e.message}}
-async function copyText(){try{await navigator.clipboard.writeText($('text').value);$('status').textContent='Copiado!'}catch(e){$('text').select();document.execCommand('copy')}} async function shareText(){if(navigator.share)try{await navigator.share({text:$('text').value})}catch(e){}else copyText()}
-</script></body></html>
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ofertaco - Gerador de Ofertas</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #f3f4f6;
+      color: #111827;
+    }
+
+    .container {
+      max-width: 700px;
+      margin: auto;
+      padding: 20px;
+    }
+
+    .card {
+      background: white;
+      border-radius: 18px;
+      padding: 20px;
+      margin-bottom: 18px;
+      box-shadow: 0 4px 15px rgba(0,0,0,.08);
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: 28px;
+    }
+
+    .sub {
+      color: #6b7280;
+    }
+
+    input,
+    select,
+    textarea {
+      width: 100%;
+      padding: 13px;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      font-size: 16px;
+      margin-top: 7px;
+      margin-bottom: 14px;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      border: 0;
+      border-radius: 10px;
+      background: #111827;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: .6;
+    }
+
+    .produto {
+      display: none;
+    }
+
+    .produto img {
+      width: 100%;
+      max-height: 350px;
+      object-fit: contain;
+      border-radius: 12px;
+    }
+
+    .preco-antigo {
+      color: #6b7280;
+      text-decoration: line-through;
+      font-size: 16px;
+    }
+
+    .preco {
+      font-size: 30px;
+      font-weight: bold;
+      margin-top: 5px;
+    }
+
+    .desconto {
+      display: inline-block;
+      margin-top: 8px;
+      padding: 7px 10px;
+      background: #dcfce7;
+      color: #166534;
+      border-radius: 8px;
+      font-weight: bold;
+    }
+
+    .resultado {
+      display: none;
+    }
+
+    .status {
+      margin-top: 12px;
+      font-size: 14px;
+    }
+
+    .erro {
+      color: #b91c1c;
+    }
+
+    .sucesso {
+      color: #166534;
+    }
+
+    .secundario {
+      margin-top: 10px;
+      background: #374151;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <div class="card">
+
+    <h1>🔥 Ofertaco</h1>
+
+    <p class="sub">
+      Cole seu link de afiliado do Mercado Livre e gere uma oferta pronta para compartilhar.
+    </p>
+
+    <label>Link do produto</label>
+
+    <input
+      id="link"
+      type="url"
+      placeholder="https://meli.la/..."
+      autocomplete="off"
+    >
+
+    <label>Modelo da mensagem</label>
+
+    <select id="modelo">
+      <option value="completa">Oferta completa</option>
+      <option value="curta">Oferta curta</option>
+    </select>
+
+    <label>Cupom (opcional)</label>
+
+    <input
+      id="cupom"
+      type="text"
+      placeholder="Ex.: R$ 30 OFF"
+    >
+
+    <label>Observação (opcional)</label>
+
+    <input
+      id="observacao"
+      type="text"
+      placeholder="Ex.: Frete grátis"
+    >
+
+    <button id="gerar" onclick="gerarOferta()">
+      🚀 GERAR OFERTA
+    </button>
+
+    <div id="status" class="status"></div>
+
+  </div>
+
+
+  <div id="produto" class="card produto">
+
+    <img id="imagem" alt="Imagem do produto">
+
+    <h2 id="titulo"></h2>
+
+    <div id="precoAntigo" class="preco-antigo"></div>
+
+    <div id="preco" class="preco"></div>
+
+    <div id="desconto" class="desconto"></div>
+
+  </div>
+
+
+  <div id="resultado" class="card resultado">
+
+    <h2>📲 Oferta pronta</h2>
+
+    <textarea id="mensagem" rows="12"></textarea>
+
+    <button onclick="copiarOferta()">
+      📋 COPIAR OFERTA
+    </button>
+
+    <button class="secundario" onclick="compartilharOferta()">
+      📲 COMPARTILHAR
+    </button>
+
+  </div>
+
+</div>
+
+
+<script>
+
+async function gerarOferta() {
+
+  const link = document.getElementById("link").value.trim();
+  const status = document.getElementById("status");
+  const botao = document.getElementById("gerar");
+
+  if (!link) {
+    status.className = "status erro";
+    status.textContent = "Cole o link do Mercado Livre.";
+    return;
+  }
+
+  if (!/^https?:\/\//i.test(link)) {
+    status.className = "status erro";
+    status.textContent = "Cole o link completo começando com https://";
+    return;
+  }
+
+  botao.disabled = true;
+
+  status.className = "status";
+  status.textContent = "🔎 Buscando informações do produto...";
+
+  document.getElementById("produto").style.display = "none";
+  document.getElementById("resultado").style.display = "none";
+
+  try {
+
+    const resposta = await fetch("/api/product", {
+
+      method: "POST",
+
+      headers: {
+        "Content-Type": "application/json"
+      },
+
+      body: JSON.stringify({
+        url: link
+      })
+
+    });
+
+    const dados = await resposta.json();
+
+    if (!resposta.ok) {
+      throw new Error(
+        dados.error || "Não foi possível encontrar o produto."
+      );
+    }
+
+    mostrarProduto(dados);
+
+    gerarMensagem(dados, link);
+
+    status.className = "status sucesso";
+    status.textContent = "✅ Oferta gerada com sucesso!";
+
+  } catch (erro) {
+
+    console.error(erro);
+
+    status.className = "status erro";
+
+    status.textContent =
+      "❌ " + erro.message;
+
+  } finally {
+
+    botao.disabled = false;
+
+  }
+
+}
+
+
+function mostrarProduto(dados) {
+
+  document.getElementById("produto").style.display = "block";
+
+  document.getElementById("imagem").src = dados.imagem || "";
+
+  document.getElementById("titulo").textContent =
+    dados.titulo || "Produto";
+
+  if (dados.precoAnterior) {
+
+    document.getElementById("precoAntigo").textContent =
+      formatarMoeda(dados.precoAnterior);
+
+  } else {
+
+    document.getElementById("precoAntigo").textContent = "";
+
+  }
+
+  document.getElementById("preco").textContent =
+    formatarMoeda(dados.preco);
+
+  if (dados.desconto) {
+
+    document.getElementById("desconto").textContent =
+      dados.desconto + "% OFF";
+
+  } else {
+
+    document.getElementById("desconto").textContent = "";
+
+  }
+
+}
+
+
+function gerarMensagem(dados, link) {
+
+  const modelo =
+    document.getElementById("modelo").value;
+
+  const cupom =
+    document.getElementById("cupom").value.trim();
+
+  const observacao =
+    document.getElementById("observacao").value.trim();
+
+  let mensagem = "";
+
+  if (modelo === "curta") {
+
+    mensagem =
+`🔥 *OFERTA!*
+
+
+🛍️ *${dados.titulo}*
+
+💰 *${formatarMoeda(dados.preco)}*
+
+${dados.desconto ? "🔥 *" + dados.desconto + "% OFF*" : ""}
+
+${cupom ? "🎟️ *CUPOM:* " + cupom : ""}
+
+👉 *COMPRE AQUI:*
+${link}`;
+
+  } else {
+
+    mensagem =
+`🔥 *OFERTA DO DIA!*
+
+
+🛍️ *${dados.titulo}*
+
+${dados.precoAnterior
+  ? "De ~" + formatarMoeda(dados.precoAnterior) + "~"
+  : ""}
+
+💰 *POR APENAS ${formatarMoeda(dados.preco)}*
+
+${dados.desconto
+  ? "🔥 *" + dados.desconto + "% OFF*"
+  : ""}
+
+${cupom
+  ? "🎟️ *CUPOM:* " + cupom
+  : ""}
+
+${observacao
+  ? "📌 " + observacao
+  : ""}
+
+👉 *APROVEITE AQUI:*
+${link}
+
+⚠️ Preço e disponibilidade podem mudar sem aviso.`;
+
+  }
+
+  document.getElementById("mensagem").value =
+    mensagem.replace(/\n{3,}/g, "\n\n");
+
+  document.getElementById("resultado").style.display =
+    "block";
+
+}
+
+
+function formatarMoeda(valor) {
+
+  return new Intl.NumberFormat(
+    "pt-BR",
+    {
+      style: "currency",
+      currency: "BRL"
+    }
+  ).format(Number(valor || 0));
+
+}
+
+
+async function copiarOferta() {
+
+  const texto =
+    document.getElementById("mensagem").value;
+
+  try {
+
+    await navigator.clipboard.writeText(texto);
+
+    alert("✅ Oferta copiada!");
+
+  } catch {
+
+    const campo =
+      document.getElementById("mensagem");
+
+    campo.select();
+
+    document.execCommand("copy");
+
+    alert("✅ Oferta copiada!");
+
+  }
+
+}
+
+
+async function compartilharOferta() {
+
+  const texto =
+    document.getElementById("mensagem").value;
+
+  if (navigator.share) {
+
+    try {
+
+      await navigator.share({
+        text: texto
+      });
+
+    } catch {
+
+    }
+
+  } else {
+
+    copiarOferta();
+
+  }
+
+}
+
+</script>
+
+</body>
+</html>
