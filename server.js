@@ -6,30 +6,43 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.static(__dirname));
 
-async function buscarPagina(url) {
+const headers = {
+  "User-Agent":
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+  "Accept":
+    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "pt-BR,pt;q=0.9"
+};
+
+async function abrirPagina(url) {
   const resposta = await fetch(url, {
     redirect: "follow",
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1",
-      "Accept":
-        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "pt-BR,pt;q=0.9"
-    }
+    headers
   });
 
   return {
-    urlFinal: resposta.url,
+    status: resposta.status,
+    url: resposta.url,
     html: await resposta.text()
   };
+}
+
+function limpar(texto) {
+  return String(texto || "")
+    .replace(/\\u002F/g, "/")
+    .replace(/\\u0026/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function encontrarId(texto) {
   const padroes = [
     /MLB-?(\d{6,})/i,
-    /"id"\s*:\s*"(MLB\d{6,})"/i,
     /"item_id"\s*:\s*"(MLB\d{6,})"/i,
-    /\/p\/(MLB\d{6,})/i
+    /"id"\s*:\s*"(MLB\d{6,})"/i
   ];
 
   for (const padrao of padroes) {
@@ -49,32 +62,111 @@ function encontrarId(texto) {
   return null;
 }
 
-async function buscarProduto(id) {
-  const urls = [
-    `https://api.mercadolibre.com/items/${id}`,
-    `https://api.mercadolibre.com/items/${id}?include_attributes=all`
+function encontrarMeta(html, nome) {
+  const regex = new RegExp(
+    `<meta[^>]+(?:property|name)=["']${nome}["'][^>]+content=["']([^"']+)["']`,
+    "i"
+  );
+
+  const resultado = html.match(regex);
+
+  return resultado ? limpar(resultado[1]) : "";
+}
+
+function encontrarTitulo(html) {
+  return (
+    encontrarMeta(html, "og:title") ||
+    encontrarMeta(html, "twitter:title") ||
+    ""
+  );
+}
+
+function encontrarImagem(html) {
+  return (
+    encontrarMeta(html, "og:image") ||
+    encontrarMeta(html, "twitter:image") ||
+    ""
+  );
+}
+
+function encontrarDescricao(html) {
+  return (
+    encontrarMeta(html, "og:description") ||
+    encontrarMeta(html, "description") ||
+    ""
+  );
+}
+
+function encontrarPreco(html) {
+  const texto = limpar(html);
+
+  const padroes = [
+    /"price"\s*:\s*([0-9]+(?:\.[0-9]+)?)/i,
+    /"amount"\s*:\s*([0-9]+(?:\.[0-9]+)?)/i,
+    /"priceValue"\s*:\s*([0-9]+(?:\.[0-9]+)?)/i
   ];
 
-  for (const url of urls) {
-    try {
-      const resposta = await fetch(url, {
-        headers: {
-          "User-Agent": "Mozilla/5.0",
-          "Accept": "application/json"
-        }
-      });
+  for (const padrao of padroes) {
+    const resultado = texto.match(padrao);
 
-      console.log("API Mercado Livre:", resposta.status);
+    if (resultado) {
+      const valor = Number(resultado[1]);
 
-      if (resposta.ok) {
-        return await resposta.json();
+      if (valor > 0) {
+        return valor;
       }
-    } catch (erro) {
-      console.log("Falha na API:", erro.message);
     }
   }
 
-  return null;
+  return 0;
+}
+
+function encontrarPrecoVisivel(html) {
+  const texto = limpar(html);
+
+  const resultado = texto.match(
+    /R\$\s?([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/
+  );
+
+  if (!resultado) {
+    return 0;
+  }
+
+  return Number(
+    resultado[1]
+      .replace(/\./g, "")
+      .replace(",", ".")
+  );
+}
+
+function encontrarPrecoAnterior(html) {
+  const texto = limpar(html);
+
+  const resultados = [
+    ...texto.matchAll(
+      /R\$\s?([0-9]{1,3}(?:\.[0-9]{3})*,[0-9]{2})/g
+    )
+  ];
+
+  if (resultados.length < 2) {
+    return null;
+  }
+
+  const valores = resultados
+    .map((r) =>
+      Number(
+        r[1]
+          .replace(/\./g, "")
+          .replace(",", ".")
+      )
+    )
+    .filter((v) => v > 0);
+
+  if (valores.length < 2) {
+    return null;
+  }
+
+  return Math.max(...valores);
 }
 
 app.post("/api/product", async (req, res) => {
@@ -89,74 +181,115 @@ app.post("/api/product", async (req, res) => {
 
     console.log("Link recebido:", link);
 
-    const pagina = await buscarPagina(link);
+    // Primeiro abre o link de afiliado.
+    const afiliado = await abrirPagina(link);
 
-    console.log("Destino encontrado:", pagina.urlFinal);
+    console.log("Destino encontrado:", afiliado.url);
 
-    const idProduto =
-      encontrarId(pagina.urlFinal) ||
-      encontrarId(pagina.html);
+    let html = afiliado.html;
+    let urlFinal = afiliado.url;
 
-    if (!idProduto) {
-      return res.status(422).json({
-        error: "Não consegui identificar o anúncio nesse link."
-      });
-    }
+    // Tenta descobrir o ID do produto.
+    const idProduto = encontrarId(
+      urlFinal + "\n" + html
+    );
 
     console.log("Produto identificado:", idProduto);
 
-    const produto = await buscarProduto(idProduto);
+    // Se encontrou o ID, tenta abrir diretamente o anúncio.
+    if (idProduto) {
+      const paginasProduto = [
+        `https://www.mercadolivre.com.br/${idProduto}`,
+        `https://produto.mercadolivre.com.br/${idProduto}`
+      ];
 
-    if (!produto) {
-      return res.status(502).json({
+      for (const urlProduto of paginasProduto) {
+        try {
+          const paginaProduto = await abrirPagina(urlProduto);
+
+          console.log(
+            "Página do produto:",
+            paginaProduto.status,
+            paginaProduto.url
+          );
+
+          if (paginaProduto.html.length > 1000) {
+            html = paginaProduto.html;
+            urlFinal = paginaProduto.url;
+            break;
+          }
+        } catch (erro) {
+          console.log(
+            "Falha ao abrir produto:",
+            erro.message
+          );
+        }
+      }
+    }
+
+    const titulo = encontrarTitulo(html);
+    const imagem = encontrarImagem(html);
+
+    let preco = encontrarPreco(html);
+
+    if (!preco) {
+      preco = encontrarPrecoVisivel(html);
+    }
+
+    let precoAnterior = encontrarPrecoAnterior(html);
+
+    if (
+      precoAnterior &&
+      precoAnterior <= preco
+    ) {
+      precoAnterior = null;
+    }
+
+    const desconto =
+      precoAnterior && preco
+        ? Math.round(
+            (1 - preco / precoAnterior) * 100
+          )
+        : 0;
+
+    if (!titulo && !preco && !imagem) {
+      return res.status(422).json({
         error:
-          "O Mercado Livre não permitiu consultar os dados desse anúncio."
+          "Consegui acessar o link, mas o Mercado Livre não disponibilizou os dados do produto nessa página."
       });
     }
 
-    const preco = Number(produto.price || 0);
-
-    const precoAnterior =
-      produto.original_price &&
-      Number(produto.original_price) > preco
-        ? Number(produto.original_price)
-        : null;
-
-    const desconto = precoAnterior
-      ? Math.round((1 - preco / precoAnterior) * 100)
-      : 0;
-
-    const imagem =
-      produto.pictures?.[0]?.secure_url ||
-      produto.pictures?.[0]?.url ||
-      produto.thumbnail ||
-      "";
-
     res.json({
-      id: produto.id,
-      titulo: produto.title || "Produto Mercado Livre",
+      id: idProduto,
+      titulo:
+        titulo || "Produto do Mercado Livre",
+      imagem,
       preco,
       precoAnterior,
       desconto,
-      imagem,
       linkAfiliado: link,
-      linkFinal: pagina.urlFinal
+      linkFinal: urlFinal
     });
 
   } catch (erro) {
     console.error("ERRO:", erro);
 
     res.status(500).json({
-      error: "Erro ao processar o link.",
+      error:
+        "Não foi possível processar o link.",
       detalhe: erro.message
     });
   }
 });
 
 app.get(/.*/, (req, res) => {
-  res.sendFile(__dirname + "/index.html");
+  res.sendFile(
+    __dirname + "/index.html"
+  );
 });
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`Ofertaco iniciado na porta ${PORT}`);
+  console.log(
+    `Ofertaco iniciado na porta ${PORT}`
+  );
 });
