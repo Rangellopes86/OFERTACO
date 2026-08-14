@@ -14,22 +14,32 @@ async function resolverLink(url) {
     }
   });
 
-  return resposta.url;
+  return {
+    urlFinal: resposta.url,
+    html: await resposta.text()
+  };
 }
 
-function encontrarId(url) {
-  const texto = String(url);
-
-  const encontrados = [
-    texto.match(/MLB-?(\d{6,})/i),
-    texto.match(/\/p\/(MLB\d{6,})/i),
-    texto.match(/[?&]item_id=(MLB\d{6,})/i)
+function encontrarId(texto) {
+  const padroes = [
+    /MLB-?(\d{6,})/i,
+    /"id"\s*:\s*"(MLB\d{6,})"/i,
+    /"item_id"\s*:\s*"(MLB\d{6,})"/i,
+    /\/p\/(MLB\d{6,})/i,
+    /\/MLB-?(\d{6,})/i
   ];
 
-  for (const resultado of encontrados) {
+  for (const padrao of padroes) {
+    const resultado = texto.match(padrao);
+
     if (resultado) {
-      const numeros = resultado[1].replace(/\D/g, "");
-      if (numeros) return "MLB" + numeros;
+      const valor = resultado[1];
+
+      if (/^MLB/i.test(valor)) {
+        return valor.toUpperCase();
+      }
+
+      return "MLB" + valor.replace(/\D/g, "");
     }
   }
 
@@ -46,19 +56,31 @@ app.post("/api/product", async (req, res) => {
       });
     }
 
-    const linkFinal = await resolverLink(link);
+    if (!/^https?:\/\//i.test(link)) {
+      return res.status(400).json({
+        error: "O link precisa começar com https://"
+      });
+    }
 
-    console.log("Link original:", link);
-    console.log("Link final:", linkFinal);
+    console.log("Link recebido:", link);
 
-    const idProduto = encontrarId(linkFinal);
+    const destino = await resolverLink(link);
+
+    console.log("Destino encontrado:", destino.urlFinal);
+
+    // Procura o ID tanto na URL final quanto no conteúdo retornado.
+    const idProduto =
+      encontrarId(destino.urlFinal) ||
+      encontrarId(destino.html);
 
     if (!idProduto) {
       return res.status(422).json({
         error: "Não consegui identificar o anúncio nesse link.",
-        finalUrl: linkFinal
+        finalUrl: destino.urlFinal
       });
     }
+
+    console.log("Produto identificado:", idProduto);
 
     const respostaProduto = await fetch(
       `https://api.mercadolibre.com/items/${idProduto}`
@@ -66,7 +88,8 @@ app.post("/api/product", async (req, res) => {
 
     if (!respostaProduto.ok) {
       return res.status(502).json({
-        error: "O Mercado Livre não retornou os dados desse produto."
+        error: "O Mercado Livre não retornou os dados do produto.",
+        status: respostaProduto.status
       });
     }
 
@@ -98,7 +121,7 @@ app.post("/api/product", async (req, res) => {
       desconto,
       imagem,
       linkAfiliado: link,
-      linkFinal
+      linkFinal: destino.urlFinal
     });
 
   } catch (erro) {
@@ -111,11 +134,6 @@ app.post("/api/product", async (req, res) => {
   }
 });
 
-/*
-  Express 5 não aceita app.get("*").
-  Usamos uma expressão regular para encaminhar
-  as páginas para o index.html.
-*/
 app.get(/.*/, (req, res) => {
   res.sendFile(__dirname + "/index.html");
 });
