@@ -4,6 +4,19 @@ const crypto = require("crypto");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+const MELI_REDIRECT_URI =
+  "https://ofertaco.onrender.com/oauth/callback";
+
+function gerarCodeVerifier() {
+  return crypto.randomBytes(32).toString("base64url");
+}
+
+function gerarCodeChallenge(verifier) {
+  return crypto
+    .createHash("sha256")
+    .update(verifier)
+    .digest("base64url");
+}
 app.use(express.json());
 app.use(express.static(__dirname));
 
