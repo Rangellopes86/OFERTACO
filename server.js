@@ -335,28 +335,71 @@ app.post("/api/product", async (req, res) => {
     });
   }
 });
-app.get("/oauth/callback", (req, res) => {
-  const code = req.query.code;
+app.get("/oauth/callback", async (req, res) => {
+  try {
+    const code = req.query.code;
 
-  if (!code) {
-    return res.status(400).send(
-      "<h2>Erro no OAuth</h2><p>Nenhum código de autorização foi recebido.</p>"
+    if (!code) {
+      return res.status(400).send(
+        "<h2>Erro no OAuth</h2><p>Nenhum código de autorização foi recebido.</p>"
+      );
+    }
+
+    if (!oauthCodeVerifier) {
+      return res.status(400).send(
+        "<h2>Erro no OAuth</h2><p>O code_verifier não está disponível.</p>"
+      );
+    }
+
+    const resposta = await fetch(
+      "https://api.mercadolibre.com/oauth/token",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          client_id: process.env.MELI_CLIENT_ID,
+          client_secret: process.env.MELI_CLIENT_SECRET,
+          code: code,
+          redirect_uri: MELI_REDIRECT_URI,
+          code_verifier: oauthCodeVerifier
+        })
+      }
+    );
+
+    const dados = await resposta.json();
+
+    console.log("Resposta OAuth:", {
+      status: resposta.status,
+      temAccessToken: !!dados.access_token
+    });
+
+    if (!resposta.ok || !dados.access_token) {
+      return res.status(400).send(`
+        <h2>Erro ao obter autorização</h2>
+        <p>O Mercado Livre não retornou o token de acesso.</p>
+        <p>Status: ${resposta.status}</p>
+      `);
+    }
+
+    oauthCodeVerifier = null;
+
+    res.send(`
+      <h2>Ofertaço conectado com sucesso! 🎉</h2>
+      <p>A conta do Mercado Livre foi autorizada.</p>
+      <p>O token de acesso foi recebido corretamente.</p>
+    `);
+
+  } catch (erro) {
+    console.error("Erro OAuth:", erro);
+
+    res.status(500).send(
+      "<h2>Erro no OAuth</h2><p>Não foi possível concluir a autorização.</p>"
     );
   }
-
-  res.send(`
-    <h2>Autorização recebida!</h2>
-    <p>O Mercado Livre enviou o código corretamente.</p>
-    <p>Agora podemos concluir a configuração do Ofertaço.</p>
-  `);
 });
-
-app.get(/.*/, (req, res) => {
-  res.sendFile(
-    __dirname + "/index.html"
-  );
-});
-
 app.listen(PORT, "0.0.0.0", () => {
   console.log(
     `Ofertaco iniciado na porta ${PORT}`
