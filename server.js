@@ -281,6 +281,21 @@ app.post("/api/product", async (req, res) => {
     });
   }
 });
+app.get("/oauth/callback", (req, res) => {
+  const code = req.query.code;
+
+  if (!code) {
+    return res.status(400).send(
+      "<h2>Erro no OAuth</h2><p>Nenhum código de autorização foi recebido.</p>"
+    );
+  }
+
+  res.send(`
+    <h2>Autorização recebida!</h2>
+    <p>O Mercado Livre enviou o código corretamente.</p>
+    <p>Agora podemos concluir a configuração do Ofertaço.</p>
+  `);
+});
 
 app.get(/.*/, (req, res) => {
   res.sendFile(
