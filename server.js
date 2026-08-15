@@ -7,6 +7,8 @@ const PORT = process.env.PORT || 3000;
 const MELI_REDIRECT_URI =
   "https://ofertaco.onrender.com/oauth/callback";
 
+let oauthCodeVerifier = null;
+
 function gerarCodeVerifier() {
   return crypto.randomBytes(32).toString("base64url");
 }
