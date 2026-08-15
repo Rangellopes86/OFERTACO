@@ -189,6 +189,8 @@ app.get("/oauth/authorize", (req, res) => {
   const verifier = gerarCodeVerifier();
   const challenge = gerarCodeChallenge(verifier);
 
+  oauthCodeVerifier = verifier;
+
   const params = new URLSearchParams({
     response_type: "code",
     client_id: process.env.MELI_CLIENT_ID,
