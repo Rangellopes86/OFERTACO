@@ -243,6 +243,14 @@ app.post("/api/product", async (req, res) => {
   status: resposta.status,
   dados: dados
 });
+
+if (!resposta.ok) {
+  return res.status(resposta.status).json({
+    error:
+      "O Mercado Livre não conseguiu localizar esse produto.",
+    detalhe: dados.message || dados.error || "Erro desconhecido"
+  });
+}
     if (!resposta.ok) {
       return res.status(resposta.status).json({
         error:
