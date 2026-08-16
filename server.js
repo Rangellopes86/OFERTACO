@@ -46,6 +46,12 @@ function extrairProductId(link) {
     : null;
 }
 
+/*
+=====================================================
+OAUTH - AUTORIZAÇÃO DO MERCADO LIVRE
+=====================================================
+*/
+
 app.get("/oauth/authorize", (req, res) => {
   const verifier = gerarCodeVerifier();
   const challenge = gerarCodeChallenge(verifier);
@@ -127,7 +133,9 @@ app.get("/oauth/callback", async (req, res) => {
     accessToken = dados.access_token;
     oauthCodeVerifier = null;
 
-    console.log("OAuth conectado com sucesso.");
+    console.log(
+      "OAuth conectado com sucesso."
+    );
 
     res.send(`
       <h2>Ofertaço conectado com sucesso! 🎉</h2>
@@ -136,7 +144,10 @@ app.get("/oauth/callback", async (req, res) => {
     `);
 
   } catch (erro) {
-    console.error("Erro OAuth:", erro);
+    console.error(
+      "Erro OAuth:",
+      erro
+    );
 
     res.status(500).send(`
       <h2>Erro no OAuth</h2>
@@ -145,6 +156,12 @@ app.get("/oauth/callback", async (req, res) => {
     `);
   }
 });
+
+/*
+=====================================================
+PRODUTO
+=====================================================
+*/
 
 app.post("/api/product", async (req, res) => {
   try {
@@ -166,13 +183,16 @@ app.post("/api/product", async (req, res) => {
       });
     }
 
-    console.log("Link recebido:", link);
+    console.log(
+      "Link recebido:",
+      link
+    );
 
     /*
-     * =====================================================
-     * 1. IDENTIFICA SE É UM PRODUTO DE CATÁLOGO
-     * =====================================================
-     */
+    ===================================================
+    1. VERIFICA SE É UM LINK DE CATÁLOGO /p/MLB...
+    ===================================================
+    */
 
     const catalogProductId =
       extrairProductId(link);
@@ -183,10 +203,10 @@ app.post("/api/product", async (req, res) => {
     );
 
     /*
-     * =====================================================
-     * 2. SE FOR /p/MLB..., CONSULTA /products/
-     * =====================================================
-     */
+    ===================================================
+    2. CONSULTA O PRODUTO DE CATÁLOGO
+    ===================================================
+    */
 
     if (catalogProductId) {
 
@@ -211,7 +231,8 @@ app.post("/api/product", async (req, res) => {
         {
           status:
             respostaProduto.status,
-          dados: produto
+          dados:
+            produto
         }
       );
 
@@ -229,10 +250,10 @@ app.post("/api/product", async (req, res) => {
       }
 
       /*
-       * =================================================
-       * 3. TENTA ENCONTRAR PUBLICAÇÕES ASSOCIADAS
-       * =================================================
-       */
+      =================================================
+      3. BUSCA OS ANÚNCIOS ASSOCIADOS AO PRODUTO
+      =================================================
+      */
 
       let anuncios = [];
 
@@ -254,14 +275,25 @@ app.post("/api/product", async (req, res) => {
         const dadosAnuncios =
           await respostaAnuncios.json();
 
+        /*
+        ===============================================
+        ALTERAÇÃO IMPORTANTE:
+        MOSTRA A RESPOSTA COMPLETA NO LOG
+        ===============================================
+        */
+
         console.log(
-          "RESPOSTA PRODUCTS ITEMS:",
-          {
-            status:
-              respostaAnuncios.status,
-            dados:
-              dadosAnuncios
-          }
+          "RESPOSTA PRODUCTS ITEMS COMPLETA:",
+          JSON.stringify(
+            {
+              status:
+                respostaAnuncios.status,
+              dados:
+                dadosAnuncios
+            },
+            null,
+            2
+          )
         );
 
         if (respostaAnuncios.ok) {
@@ -271,6 +303,7 @@ app.post("/api/product", async (req, res) => {
               dadosAnuncios
             )
           ) {
+
             anuncios =
               dadosAnuncios;
 
@@ -279,6 +312,7 @@ app.post("/api/product", async (req, res) => {
               dadosAnuncios.results
             )
           ) {
+
             anuncios =
               dadosAnuncios.results;
           }
@@ -290,14 +324,24 @@ app.post("/api/product", async (req, res) => {
           "Erro ao buscar anúncios:",
           erroAnuncios.message
         );
-
       }
 
       /*
-       * =================================================
-       * 4. SE ENCONTROU UM ANÚNCIO, CONSULTA /items/
-       * =================================================
-       */
+      =================================================
+      4. MOSTRA QUANTOS ANÚNCIOS FORAM ENCONTRADOS
+      =================================================
+      */
+
+      console.log(
+        "Quantidade de anúncios encontrados:",
+        anuncios.length
+      );
+
+      /*
+      =================================================
+      5. TENTA PEGAR O PRIMEIRO ANÚNCIO
+      =================================================
+      */
 
       let anuncio = null;
 
@@ -306,51 +350,85 @@ app.post("/api/product", async (req, res) => {
         const primeiro =
           anuncios[0];
 
+        console.log(
+          "PRIMEIRO ANÚNCIO ENCONTRADO:",
+          JSON.stringify(
+            primeiro,
+            null,
+            2
+          )
+        );
+
         const anuncioId =
           primeiro.id ||
           primeiro.item_id ||
           primeiro.itemId;
 
+        console.log(
+          "ID DO ANÚNCIO:",
+          anuncioId
+        );
+
+        /*
+        ===============================================
+        6. TENTA CONSULTAR O ANÚNCIO
+        ===============================================
+        */
+
         if (anuncioId) {
 
-          const respostaItem =
-            await fetch(
-              `https://api.mercadolibre.com/items/${anuncioId}`,
-              {
-                headers: {
-                  Authorization:
-                    `Bearer ${accessToken}`,
-                  Accept:
-                    "application/json"
+          try {
+
+            const respostaItem =
+              await fetch(
+                `https://api.mercadolibre.com/items/${anuncioId}`,
+                {
+                  headers: {
+                    Authorization:
+                      `Bearer ${accessToken}`,
+                    Accept:
+                      "application/json"
+                  }
                 }
-              }
+              );
+
+            const dadosItem =
+              await respostaItem.json();
+
+            console.log(
+              "RESPOSTA ITEM DO CATÁLOGO:",
+              JSON.stringify(
+                {
+                  status:
+                    respostaItem.status,
+                  dados:
+                    dadosItem
+                },
+                null,
+                2
+              )
             );
 
-          const dadosItem =
-            await respostaItem.json();
-
-          console.log(
-            "RESPOSTA ITEM DO CATÁLOGO:",
-            {
-              status:
-                respostaItem.status,
-              dados:
-                dadosItem
+            if (respostaItem.ok) {
+              anuncio =
+                dadosItem;
             }
-          );
 
-          if (respostaItem.ok) {
-            anuncio =
-              dadosItem;
+          } catch (erroItem) {
+
+            console.log(
+              "Erro ao consultar anúncio:",
+              erroItem.message
+            );
           }
         }
       }
 
       /*
-       * =================================================
-       * 5. DADOS DO PRODUTO
-       * =================================================
-       */
+      =================================================
+      7. DADOS BÁSICOS DO CATÁLOGO
+      =================================================
+      */
 
       const titulo =
         produto.name ||
@@ -364,21 +442,65 @@ app.post("/api/product", async (req, res) => {
         "";
 
       /*
-       * O preço normalmente pertence ao anúncio,
-       * não ao produto de catálogo.
-       */
+      =================================================
+      8. TENTA PEGAR O PREÇO DO ANÚNCIO
+      =================================================
+      */
 
-      const preco =
+      let preco = Number(
+        anuncio?.price || 0
+      );
+
+      let precoAnterior =
         Number(
-          anuncio?.price ||
+          anuncio?.original_price || 0
+        );
+
+      /*
+      =================================================
+      9. SE O ANÚNCIO NÃO TROUXE PREÇO,
+         VERIFICA O PRIMEIRO RESULTADO DIRETAMENTE
+      =================================================
+      */
+
+      if (
+        preco === 0 &&
+        anuncios.length > 0
+      ) {
+
+        const primeiro =
+          anuncios[0];
+
+        preco = Number(
+          primeiro.price ||
+          primeiro.price_amount ||
+          primeiro.amount ||
+          primeiro.current_price ||
           0
         );
 
-      const precoAnterior =
-        Number(
-          anuncio?.original_price ||
-          0
+        precoAnterior =
+          Number(
+            primeiro.original_price ||
+            primeiro.originalPrice ||
+            primeiro.previous_price ||
+            0
+          );
+
+        console.log(
+          "PREÇO OBTIDO DIRETAMENTE DO RESULTADO:",
+          {
+            preco,
+            precoAnterior
+          }
         );
+      }
+
+      /*
+      =================================================
+      10. CALCULA DESCONTO
+      =================================================
+      */
 
       const desconto =
         precoAnterior > preco &&
@@ -390,6 +512,29 @@ app.post("/api/product", async (req, res) => {
                 100
             )
           : 0;
+
+      /*
+      =================================================
+      11. RETORNA OS DADOS PARA O OFERTAÇO
+      =================================================
+      */
+
+      console.log(
+        "DADOS FINAIS DO PRODUTO:",
+        {
+          id:
+            anuncio?.id ||
+            catalogProductId,
+
+          titulo,
+
+          preco,
+
+          precoAnterior,
+
+          desconto
+        }
+      );
 
       return res.json({
         id:
@@ -419,10 +564,11 @@ app.post("/api/product", async (req, res) => {
     }
 
     /*
-     * =====================================================
-     * 6. SE NÃO FOR /p/MLB..., TENTA COMO ANÚNCIO
-     * =====================================================
-     */
+    =====================================================
+    12. CASO NÃO SEJA LINK DE CATÁLOGO,
+        TENTA COMO ANÚNCIO NORMAL
+    =====================================================
+    */
 
     const idProduto =
       encontrarId(link);
@@ -457,11 +603,15 @@ app.post("/api/product", async (req, res) => {
 
     console.log(
       "RESPOSTA COMPLETA API MERCADO LIVRE:",
-      {
-        status:
-          resposta.status,
-        dados
-      }
+      JSON.stringify(
+        {
+          status:
+            resposta.status,
+          dados
+        },
+        null,
+        2
+      )
     );
 
     if (!resposta.ok) {
@@ -546,6 +696,12 @@ app.post("/api/product", async (req, res) => {
   }
 });
 
+/*
+=====================================================
+HEALTH CHECK
+=====================================================
+*/
+
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",
@@ -554,6 +710,12 @@ app.get("/health", (req, res) => {
       !!accessToken
   });
 });
+
+/*
+=====================================================
+INICIA SERVIDOR
+=====================================================
+*/
 
 app.listen(
   PORT,
