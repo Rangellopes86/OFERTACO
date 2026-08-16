@@ -353,7 +353,9 @@ app.get("/oauth/callback", async (req, res) => {
     );
 
     const dados = await resposta.json();
-
+if (resposta.ok && dados.access_token) {
+  accessToken = dados.access_token;
+}
     console.log("Resposta OAuth:", {
   status: resposta.status,
   dados: dados
