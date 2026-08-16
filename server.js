@@ -251,13 +251,6 @@ if (!resposta.ok) {
     detalhe: dados.message || dados.error || "Erro desconhecido"
   });
 }
-    if (!resposta.ok) {
-      return res.status(resposta.status).json({
-        error:
-          "O Mercado Livre não conseguiu localizar esse produto.",
-        detalhe: dados.message || dados.error || "Erro desconhecido"
-      });
-    }
 
     const preco = Number(dados.price || 0);
     const precoAnterior = Number(dados.original_price || 0);
