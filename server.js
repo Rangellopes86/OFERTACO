@@ -239,14 +239,10 @@ app.post("/api/product", async (req, res) => {
 
     const dados = await resposta.json();
 
-    console.log("Resposta API Mercado Livre:", {
-      status: resposta.status,
-      id: dados.id,
-      title: dados.title,
-      price: dados.price,
-      original_price: dados.original_price
-    });
-
+    console.log("RESPOSTA COMPLETA API MERCADO LIVRE:", {
+  status: resposta.status,
+  dados: dados
+});
     if (!resposta.ok) {
       return res.status(resposta.status).json({
         error:
