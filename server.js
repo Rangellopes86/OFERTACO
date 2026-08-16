@@ -216,6 +216,93 @@ app.post("/api/product", async (req, res) => {
       });
     }
 
+    if (!accessToken) {
+      return res.status(401).json({
+        error:
+          "O Ofertaço ainda não está conectado ao Mercado Livre."
+      });
+    }
+
+    console.log("Link recebido:", link);
+
+    // Procura o ID do anúncio no próprio link.
+    const idProduto = encontrarId(link);
+
+    console.log("Produto identificado:", idProduto);
+
+    if (!idProduto) {
+      return res.status(422).json({
+        error:
+          "Não consegui identificar o ID do produto nesse link."
+      });
+    }
+
+    // Consulta diretamente a API oficial do Mercado Livre.
+    const resposta = await fetch(
+      `https://api.mercadolibre.com/items/${idProduto}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json"
+        }
+      }
+    );
+
+    const dados = await resposta.json();
+
+    console.log("Resposta API Mercado Livre:", {
+      status: resposta.status,
+      id: dados.id,
+      title: dados.title,
+      price: dados.price,
+      original_price: dados.original_price
+    });
+
+    if (!resposta.ok) {
+      return res.status(resposta.status).json({
+        error:
+          "O Mercado Livre não conseguiu localizar esse produto.",
+        detalhe: dados.message || dados.error || "Erro desconhecido"
+      });
+    }
+
+    const preco = Number(dados.price || 0);
+    const precoAnterior = Number(dados.original_price || 0);
+
+    const desconto =
+      precoAnterior > preco && preco > 0
+        ? Math.round((1 - preco / precoAnterior) * 100)
+        : 0;
+
+    const imagem =
+      dados.pictures?.[0]?.url ||
+      dados.thumbnail ||
+      "";
+
+    res.json({
+      id: dados.id,
+      titulo: dados.title || "Produto do Mercado Livre",
+      imagem,
+      preco,
+      precoAnterior:
+        precoAnterior > preco ? precoAnterior : null,
+      desconto,
+      linkAfiliado: link,
+      linkFinal:
+        dados.permalink || link
+    });
+
+  } catch (erro) {
+    console.error("ERRO API PRODUTO:", erro);
+
+    res.status(500).json({
+      error: "Não foi possível consultar o produto.",
+      detalhe: erro.message
+    });
+  }
+});
+    }
+
     console.log("Link recebido:", link);
 
     // Primeiro abre o link de afiliado.
