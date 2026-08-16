@@ -8,6 +8,7 @@ const MELI_REDIRECT_URI =
   "https://ofertaco.onrender.com/oauth/callback";
 
 let oauthCodeVerifier = null;
+let accessToken = null;
 
 function gerarCodeVerifier() {
   return crypto.randomBytes(32).toString("base64url");
