@@ -205,24 +205,6 @@ app.get("/oauth/authorize", (req, res) => {
   );
 });
 
-app.get("/oauth/authorize", (req, res) => {
-  const verifier = gerarCodeVerifier();
-  const challenge = gerarCodeChallenge(verifier);
-
-  const params = new URLSearchParams({
-    response_type: "code",
-    client_id: process.env.MELI_CLIENT_ID,
-    redirect_uri: MELI_REDIRECT_URI,
-    code_challenge: challenge,
-    code_challenge_method: "S256"
-  });
-
-  res.redirect(
-    "https://auth.mercadolivre.com.br/authorization?" +
-    params.toString()
-  );
-});
-
 app.post("/api/product", async (req, res) => {
   try {
     const link = String(req.body?.url || "").trim();
