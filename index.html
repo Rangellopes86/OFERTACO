@@ -2,7 +2,11 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
   <title>Ofertaco - Gerador de Ofertas</title>
 
   <style>
@@ -28,7 +32,7 @@
       border-radius: 18px;
       padding: 20px;
       margin-bottom: 18px;
-      box-shadow: 0 4px 15px rgba(0,0,0,.08);
+      box-shadow: 0 4px 15px rgba(0, 0, 0, .08);
     }
 
     h1 {
@@ -158,7 +162,7 @@
     <input
       id="cupom"
       type="text"
-      placeholder="Ex.: R$ 30 OFF"
+      placeholder="Ex.: R$ 30 de desconto"
     >
 
     <label>Observação (opcional)</label>
@@ -178,7 +182,7 @@
   </div>
 
 
-  <div id="produto" class="card produto">
+  <div id="produto" class="produto card">
 
     <img id="imagem" alt="Imagem do produto">
 
@@ -193,7 +197,7 @@
   </div>
 
 
-  <div id="resultado" class="card resultado">
+  <div id="resultado" class="resultado card">
 
     <h2>📲 Oferta pronta</h2>
 
@@ -216,7 +220,11 @@
 
 async function gerarOferta() {
 
-  const link = document.getElementById("link").value.trim();
+  const link = document
+    .getElementById("link")
+    .value
+    .trim();
+
   const status = document.getElementById("status");
   const botao = document.getElementById("gerar");
 
@@ -228,14 +236,16 @@ async function gerarOferta() {
 
   if (!/^https?:\/\//i.test(link)) {
     status.className = "status erro";
-    status.textContent = "Cole o link completo começando com https://";
+    status.textContent =
+      "Cole o link completo começando com https://";
     return;
   }
 
   botao.disabled = true;
 
   status.className = "status";
-  status.textContent = "🔎 Buscando informações do produto...";
+  status.textContent =
+    "🔎 Buscando informações do produto...";
 
   document.getElementById("produto").style.display = "none";
   document.getElementById("resultado").style.display = "none";
@@ -260,7 +270,8 @@ async function gerarOferta() {
 
     if (!resposta.ok) {
       throw new Error(
-        dados.error || "Não foi possível encontrar o produto."
+        dados.error ||
+        "Não foi possível encontrar o produto."
       );
     }
 
@@ -269,7 +280,8 @@ async function gerarOferta() {
     gerarMensagem(dados, link);
 
     status.className = "status sucesso";
-    status.textContent = "✅ Oferta gerada com sucesso!";
+    status.textContent =
+      "✅ Oferta gerada com sucesso!";
 
   } catch (erro) {
 
@@ -291,9 +303,11 @@ async function gerarOferta() {
 
 function mostrarProduto(dados) {
 
-  document.getElementById("produto").style.display = "block";
+  document.getElementById("produto").style.display =
+    "block";
 
-  document.getElementById("imagem").src = dados.imagem || "";
+  document.getElementById("imagem").src =
+    dados.imagem || "";
 
   document.getElementById("titulo").textContent =
     dados.titulo || "Produto";
@@ -305,7 +319,8 @@ function mostrarProduto(dados) {
 
   } else {
 
-    document.getElementById("precoAntigo").textContent = "";
+    document.getElementById("precoAntigo").textContent =
+      "";
 
   }
 
@@ -319,7 +334,8 @@ function mostrarProduto(dados) {
 
   } else {
 
-    document.getElementById("desconto").textContent = "";
+    document.getElementById("desconto").textContent =
+      "";
 
   }
 
@@ -343,16 +359,10 @@ function gerarMensagem(dados, link) {
 
     mensagem =
 `🔥 *OFERTA!*
-
-
 🛍️ *${dados.titulo}*
-
 💰 *${formatarMoeda(dados.preco)}*
-
 ${dados.desconto ? "🔥 *" + dados.desconto + "% OFF*" : ""}
-
 ${cupom ? "🎟️ *CUPOM:* " + cupom : ""}
-
 👉 *COMPRE AQUI:*
 ${link}`;
 
@@ -360,31 +370,22 @@ ${link}`;
 
     mensagem =
 `🔥 *OFERTA DO DIA!*
-
-
 🛍️ *${dados.titulo}*
-
 ${dados.precoAnterior
   ? "De ~" + formatarMoeda(dados.precoAnterior) + "~"
   : ""}
-
 💰 *POR APENAS ${formatarMoeda(dados.preco)}*
-
 ${dados.desconto
   ? "🔥 *" + dados.desconto + "% OFF*"
   : ""}
-
 ${cupom
   ? "🎟️ *CUPOM:* " + cupom
   : ""}
-
 ${observacao
   ? "📌 " + observacao
   : ""}
-
 👉 *APROVEITE AQUI:*
 ${link}
-
 ⚠️ Preço e disponibilidade podem mudar sem aviso.`;
 
   }
