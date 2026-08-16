@@ -56,24 +56,13 @@ function limpar(texto) {
 }
 
 function encontrarId(texto) {
-  const padroes = [
-    /MLB-?(\d{6,})/i,
-    /"item_id"\s*:\s*"(MLB\d{6,})"/i,
-    /"id"\s*:\s*"(MLB\d{6,})"/i
-  ];
+  const valor = String(texto || "");
 
-  for (const padrao of padroes) {
-    const resultado = String(texto).match(padrao);
+  // Procura diretamente por IDs de anúncios do Mercado Livre.
+  const resultado = valor.match(/\bMLB\d{6,}\b/i);
 
-    if (resultado) {
-      const valor = resultado[1];
-
-      if (/^MLB/i.test(valor)) {
-        return valor.toUpperCase();
-      }
-
-      return "MLB" + valor.replace(/\D/g, "");
-    }
+  if (resultado) {
+    return resultado[0].toUpperCase();
   }
 
   return null;
