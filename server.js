@@ -383,7 +383,7 @@ function encontrarId(texto) {
 
 /*
 =====================================================
-ENCONTRAR USER PRODUCT MLBU
+ENCONTRAR USER PRODUCTS MLBU
 =====================================================
 */
 
@@ -510,7 +510,7 @@ async function resolverLink(link) {
           headers: {
 
             "User-Agent":
-              "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1",
+              "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
 
             "Accept":
               "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -634,8 +634,8 @@ async function consultarAnuncio(idProduto) {
   );
 
   /*
-  Tenta consulta pública se o token
-  for recusado.
+  Se o token não puder acessar o anúncio,
+  tenta a consulta pública.
   */
 
   if (
@@ -690,11 +690,13 @@ async function consultarAnuncio(idProduto) {
 
 /*
 =====================================================
-CONSULTAR USER PRODUCT MLBU
+CONSULTAR USER PRODUCT
 =====================================================
 */
 
-async function consultarUserProduct(idUserProduct) {
+async function consultarUserProduct(
+  idUserProduct
+) {
 
   console.log(
     "Consultando User Product:",
@@ -749,17 +751,19 @@ async function buscarAnunciosDoUserProduct(
   if (!sellerId) {
 
     console.log(
-      "Não foi informado seller_id para buscar anúncios do User Product."
+      "Seller ID não informado."
     );
 
     return [];
   }
 
   const url =
-    `https://api.mercadolibre.com/users/${sellerId}/items/search?user_product_id=${encodeURIComponent(idUserProduct)}`;
+    `https://api.mercadolibre.com/users/${sellerId}/items/search?user_product_id=${encodeURIComponent(
+      idUserProduct
+    )}`;
 
   console.log(
-    "Buscando anúncios associados:",
+    "Buscando anúncios associados ao User Product:",
     url
   );
 
@@ -902,11 +906,6 @@ function montarDadosUserProduct(
   linkOriginal
 ) {
 
-  /*
-  Se conseguimos um anúncio MLB,
-  usamos os dados dele.
-  */
-
   if (anuncio) {
 
     const resultado =
@@ -915,33 +914,25 @@ function montarDadosUserProduct(
         linkOriginal
       );
 
-    /*
-    Mantém o título do anúncio,
-    mas informa o User Product.
-    */
-
     resultado.userProductId =
       dados.id || null;
 
     return resultado;
   }
 
-  /*
-  Caso não exista anúncio associado
-  que possamos consultar.
-  */
-
   return {
 
     id:
-      dados.id,
+      dados.id || null,
 
     titulo:
       dados.name ||
+      dados.title ||
       "Produto do Mercado Livre",
 
     imagem:
       dados.pictures?.[0]?.url ||
+      dados.thumbnail ||
       "",
 
     preco:
@@ -960,7 +951,7 @@ function montarDadosUserProduct(
       linkOriginal,
 
     userProductId:
-      dados.id
+      dados.id || null
   };
 }
 
@@ -1214,11 +1205,6 @@ app.post(
       let htmlResolvido =
         "";
 
-      /*
-      Para links meli.la,
-      precisamos resolver o redirecionamento.
-      */
-
       if (
         linkOriginal
           .toLowerCase()
@@ -1249,6 +1235,11 @@ app.post(
 
         } catch (erroLink) {
 
+          console.error(
+            "Erro ao resolver link:",
+            erroLink.message
+          );
+
           return res.status(400).json({
 
             error:
@@ -1262,406 +1253,7 @@ app.post(
 
       /*
       =================================================
-      2. IDENTIFICAR MLBU
-      =================================================
-      */
-
-      const textoInicial =
-        [
-          linkFinal,
-          htmlResolvido
-        ].join("\n");
-
-      const userProducts =
-        encontrarTodosUserProducts(
-          textoInicial
-        );
-
-      console.log(
-        "USER PRODUCTS MLBU ENCONTRADOS:",
-        userProducts
-      );
-
-      /*
-      =================================================
-      3. PROCESSAR USER PRODUCT
-      =================================================
-      */
-
-      if (
-        userProducts.length > 0
-      ) {
-
-        for (
-          const idUserProduct of userProducts
-        ) {
-
-          try {
-
-            const resultadoUP =
-              await consultarUserProduct(
-                idUserProduct
-              );
-
-            if (
-              !resultadoUP.resposta.ok
-            ) {
-
-              console.log(
-                `User Product ${idUserProduct} retornou status ${resultadoUP.resposta.status}`
-              );
-
-              continue;
-            }
-
-            const dadosUP =
-              resultadoUP.dados;
-
-            /*
-            Seller/user associado ao UP.
-            */
-
-            const sellerId =
-              dadosUP.user_id ||
-              dadosUP.seller_id ||
-              null;
-
-            console.log(
-              "SELLER ID DO USER PRODUCT:",
-              sellerId
-            );
-
-            /*
-            Busca anúncios MLB associados
-            ao User Product.
-            */
-
-            const idsAnuncios =
-              await buscarAnunciosDoUserProduct(
-                idUserProduct,
-                sellerId
-              );
-
-            console.log(
-              "ANÚNCIOS ASSOCIADOS AO USER PRODUCT:",
-              idsAnuncios
-            );
-
-            /*
-            Tenta consultar os anúncios encontrados.
-            */
-
-            for (
-              const idAnuncio of idsAnuncios
-            ) {
-
-              try {
-
-                const resultadoItem =
-                  await consultarAnuncio(
-                    idAnuncio
-                  );
-
-                if (
-                  resultadoItem.resposta.ok
-                ) {
-
-                  console.log(
-                    "ANÚNCIO ENCONTRADO VIA USER PRODUCT:",
-                    idAnuncio
-                  );
-
-                  return res.json(
-                    montarDadosAnuncio(
-                      resultadoItem.dados,
-                      linkOriginal
-                    )
-                  );
-                }
-
-              } catch (erroItem) {
-
-                console.log(
-                  `Erro consultando anúncio ${idAnuncio}:`,
-                  erroItem.message
-                );
-              }
-            }
-
-            /*
-            Se o UP foi encontrado mas
-            não conseguimos acessar um MLB,
-            retornamos os dados básicos.
-            */
-
-            console.log(
-              "User Product encontrado, mas nenhum anúncio MLB pôde ser consultado."
-            );
-
-            const respostaUP =
-              montarDadosUserProduct(
-                dadosUP,
-                null,
-                linkOriginal
-              );
-
-            /*
-            Não retornamos imediatamente com
-            preço 0 se ainda houver outros
-            IDs para tentar.
-            */
-
-            if (
-              userProducts.length === 1
-            ) {
-
-              return res.json(
-                respostaUP
-              );
-            }
-
-          } catch (erroUP) {
-
-            console.error(
-              `Erro processando User Product ${idUserProduct}:`,
-              erroUP.message
-            );
-          }
-        }
-      }
-
-      /*
-      =================================================
-      4. CATÁLOGO
-      =================================================
-      */
-
-      const idCatalogo =
-        extrairIdCatalogo(
-          linkFinal
-        );
-
-      console.log(
-        "Product ID de catálogo:",
-        idCatalogo
-      );
-
-      if (idCatalogo) {
-
-        const respostaProduto =
-          await fetch(
-            `https://api.mercadolibre.com/products/${idCatalogo}`,
-            {
-              headers: {
-
-                Authorization:
-                  `Bearer ${accessToken}`,
-
-                Accept:
-                  "application/json"
-              }
-            }
-          );
-
-        const produto =
-          await respostaProduto.json();
-
-        console.log(
-          "RESPOSTA PRODUCTS:",
-          {
-            status:
-              respostaProduto.status,
-
-            dados:
-              produto
-          }
-        );
-
-        if (
-          respostaProduto.ok
-        ) {
-
-          let anuncios = [];
-
-          try {
-
-            const respostaAnuncios =
-              await fetch(
-                `https://api.mercadolibre.com/products/${idCatalogo}/items`,
-                {
-                  headers: {
-
-                    Authorization:
-                      `Bearer ${accessToken}`,
-
-                    Accept:
-                      "application/json"
-                  }
-                }
-              );
-
-            const dadosAnuncios =
-              await respostaAnuncios.json();
-
-            if (
-              respostaAnuncios.ok
-            ) {
-
-              if (
-                Array.isArray(
-                  dadosAnuncios
-                )
-              ) {
-
-                anuncios =
-                  dadosAnuncios;
-
-              } else if (
-                Array.isArray(
-                  dadosAnuncios.results
-                )
-              ) {
-
-                anuncios =
-                  dadosAnuncios.results;
-              }
-            }
-
-          } catch (erroAnuncios) {
-
-            console.error(
-              "Erro ao buscar anúncios:",
-              erroAnuncios.message
-            );
-          }
-
-          const primeiro =
-            anuncios[0] || null;
-
-          const idAnuncio =
-            primeiro?.item_id ||
-            primeiro?.id ||
-            null;
-
-          let anuncioCompleto =
-            null;
-
-          let preco =
-            Number(
-              primeiro?.price || 0
-            );
-
-          let precoAnterior =
-            Number(
-              primeiro?.original_price || 0
-            );
-
-          if (idAnuncio) {
-
-            const resultadoItem =
-              await consultarAnuncio(
-                idAnuncio
-              );
-
-            if (
-              resultadoItem.resposta.ok
-            ) {
-
-              anuncioCompleto =
-                resultadoItem.dados;
-
-              preco =
-                Number(
-                  anuncioCompleto.price ||
-                  preco ||
-                  0
-                );
-
-              precoAnterior =
-                Number(
-                  anuncioCompleto.original_price ||
-                  precoAnterior ||
-                  0
-                );
-            }
-          }
-
-          const titulo =
-            produto.name ||
-            produto.title ||
-            anuncioCompleto?.title ||
-            "Produto do Mercado Livre";
-
-          let imagem = "";
-
-          if (
-            Array.isArray(
-              produto.pictures
-            ) &&
-            produto.pictures.length > 0
-          ) {
-
-            imagem =
-              produto.pictures[0].url ||
-              produto.pictures[0].secure_url ||
-              "";
-          }
-
-          if (
-            !imagem &&
-            anuncioCompleto
-          ) {
-
-            imagem =
-              anuncioCompleto
-                .pictures?.[0]?.url ||
-              anuncioCompleto.thumbnail ||
-              "";
-          }
-
-          const desconto =
-            precoAnterior > preco &&
-            preco > 0
-              ? Math.round(
-                  (
-                    1 -
-                    preco /
-                      precoAnterior
-                  ) * 100
-                )
-              : 0;
-
-          return res.json({
-
-            id:
-              idAnuncio ||
-              idCatalogo,
-
-            titulo,
-
-            imagem,
-
-            preco,
-
-            precoAnterior:
-              precoAnterior > preco
-                ? precoAnterior
-                : null,
-
-            desconto,
-
-            linkAfiliado:
-              linkOriginal,
-
-            linkFinal:
-              linkOriginal
-          });
-        }
-      }
-
-      /*
-      =================================================
-      5. ENCONTRAR IDs MLB
+      2. ANALISAR LINK E HTML
       =================================================
       */
 
@@ -1671,35 +1263,34 @@ app.post(
           htmlResolvido
         ].join("\n");
 
+      /*
+      =================================================
+      3. PRIMEIRO PROCURAR MLB
+      =================================================
+
+      Esta é a principal alteração.
+
+      Antes o código tentava o MLBU primeiro.
+      Agora procuramos qualquer MLB que esteja
+      disponível no link ou no HTML.
+
+      Isso evita que um erro 403 do MLBU impeça
+      a identificação do anúncio.
+      */
+
       const idsEncontrados =
         encontrarTodosIds(
           textoParaAnalise
         );
 
       console.log(
-        "IDs MLB encontrados:",
+        "IDs MLB encontrados inicialmente:",
         idsEncontrados
       );
 
-      if (
-        idsEncontrados.length === 0
-      ) {
-
-        return res.status(422).json({
-
-          error:
-            "Não consegui identificar o produto nesse link.",
-
-          detalhe:
-            userProducts.length > 0
-              ? "O User Product foi identificado, mas não foi possível obter um anúncio associado."
-              : "Nenhum ID MLB ou MLBU foi encontrado."
-        });
-      }
-
       /*
       =================================================
-      6. TESTAR CADA MLB
+      4. TESTAR MLBs ENCONTRADOS
       =================================================
       */
 
@@ -1708,7 +1299,7 @@ app.post(
       ) {
 
         console.log(
-          "Tentando consultar ID:",
+          "Tentando consultar MLB encontrado:",
           idProduto
         );
 
@@ -1737,13 +1328,13 @@ app.post(
           }
 
           console.log(
-            `ID ${idProduto} não pôde ser consultado. Status: ${resultado.resposta.status}`
+            `MLB ${idProduto} não pôde ser consultado. Status: ${resultado.resposta.status}`
           );
 
         } catch (erroItem) {
 
           console.log(
-            `Erro consultando ${idProduto}:`,
+            `Erro consultando MLB ${idProduto}:`,
             erroItem.message
           );
         }
@@ -1751,17 +1342,534 @@ app.post(
 
       /*
       =================================================
-      7. NENHUM ANÚNCIO FUNCIONOU
+      5. IDENTIFICAR MLBU
       =================================================
       */
 
-      return res.status(403).json({
+      const userProducts =
+        encontrarTodosUserProducts(
+          textoParaAnalise
+        );
+
+      console.log(
+        "USER PRODUCTS MLBU ENCONTRADOS:",
+        userProducts
+      );
+
+      /*
+      =================================================
+      6. PROCESSAR MLBU SEM BLOQUEAR O FLUXO
+      =================================================
+      */
+
+      if (
+        userProducts.length > 0
+      ) {
+
+        for (
+          const idUserProduct of userProducts
+        ) {
+
+          try {
+
+            console.log(
+              "Tentando consultar User Product:",
+              idUserProduct
+            );
+
+            const resultadoUP =
+              await consultarUserProduct(
+                idUserProduct
+              );
+
+            /*
+            =========================================
+            ALTERAÇÃO IMPORTANTE
+            =========================================
+
+            Se o Mercado Livre responder 403,
+            NÃO encerramos o processamento.
+
+            Apenas registramos o problema e
+            continuamos procurando o MLB.
+            */
+
+            if (
+              resultadoUP.resposta.status === 403
+            ) {
+
+              console.log(
+                `User Product ${idUserProduct} retornou 403. O acesso ao UP foi recusado pelo Mercado Livre. Continuando busca por MLB...`
+              );
+
+              continue;
+            }
+
+            if (
+              !resultadoUP.resposta.ok
+            ) {
+
+              console.log(
+                `User Product ${idUserProduct} retornou status ${resultadoUP.resposta.status}. Continuando...`
+              );
+
+              continue;
+            }
+
+            const dadosUP =
+              resultadoUP.dados;
+
+            console.log(
+              "USER PRODUCT OBTIDO:",
+              dadosUP
+            );
+
+            /*
+            =========================================
+            SELLER ID
+            =========================================
+            */
+
+            const sellerId =
+              dadosUP.user_id ||
+              dadosUP.seller_id ||
+              dadosUP.user?.id ||
+              dadosUP.seller?.id ||
+              null;
+
+            console.log(
+              "SELLER ID DO USER PRODUCT:",
+              sellerId
+            );
+
+            /*
+            =========================================
+            BUSCAR ANÚNCIOS ASSOCIADOS
+            =========================================
+            */
+
+            if (sellerId) {
+
+              const idsAnuncios =
+                await buscarAnunciosDoUserProduct(
+                  idUserProduct,
+                  sellerId
+                );
+
+              console.log(
+                "ANÚNCIOS ASSOCIADOS AO USER PRODUCT:",
+                idsAnuncios
+              );
+
+              for (
+                const idAnuncio of idsAnuncios
+              ) {
+
+                try {
+
+                  const resultadoItem =
+                    await consultarAnuncio(
+                      idAnuncio
+                    );
+
+                  if (
+                    resultadoItem.resposta.ok
+                  ) {
+
+                    console.log(
+                      "ANÚNCIO ENCONTRADO VIA USER PRODUCT:",
+                      idAnuncio
+                    );
+
+                    return res.json(
+                      montarDadosAnuncio(
+                        resultadoItem.dados,
+                        linkOriginal
+                      )
+                    );
+                  }
+
+                } catch (erroItem) {
+
+                  console.log(
+                    `Erro consultando anúncio ${idAnuncio}:`,
+                    erroItem.message
+                  );
+                }
+              }
+            }
+
+          } catch (erroUP) {
+
+            console.error(
+              `Erro processando User Product ${idUserProduct}:`,
+              erroUP.message
+            );
+
+            /*
+            Nunca deixamos um erro de MLBU
+            interromper a procura do produto.
+            */
+          }
+        }
+      }
+
+      /*
+      =================================================
+      7. CATÁLOGO
+      =================================================
+      */
+
+      const idCatalogo =
+        extrairIdCatalogo(
+          linkFinal
+        );
+
+      console.log(
+        "Product ID de catálogo:",
+        idCatalogo
+      );
+
+      if (idCatalogo) {
+
+        try {
+
+          const respostaProduto =
+            await fetch(
+              `https://api.mercadolibre.com/products/${idCatalogo}`,
+              {
+                headers: {
+
+                  Authorization:
+                    `Bearer ${accessToken}`,
+
+                  Accept:
+                    "application/json"
+                }
+              }
+            );
+
+          const produto =
+            await respostaProduto.json();
+
+          console.log(
+            "RESPOSTA PRODUCTS:",
+            {
+              status:
+                respostaProduto.status,
+
+              dados:
+                produto
+            }
+          );
+
+          if (
+            respostaProduto.ok
+          ) {
+
+            let anuncios = [];
+
+            try {
+
+              const respostaAnuncios =
+                await fetch(
+                  `https://api.mercadolibre.com/products/${idCatalogo}/items`,
+                  {
+                    headers: {
+
+                      Authorization:
+                        `Bearer ${accessToken}`,
+
+                      Accept:
+                        "application/json"
+                    }
+                  }
+                );
+
+              const dadosAnuncios =
+                await respostaAnuncios.json();
+
+              console.log(
+                "RESPOSTA PRODUCTS ITEMS:",
+                {
+                  status:
+                    respostaAnuncios.status,
+
+                  dados:
+                    dadosAnuncios
+                }
+              );
+
+              if (
+                respostaAnuncios.ok
+              ) {
+
+                if (
+                  Array.isArray(
+                    dadosAnuncios
+                  )
+                ) {
+
+                  anuncios =
+                    dadosAnuncios;
+
+                } else if (
+                  Array.isArray(
+                    dadosAnuncios.results
+                  )
+                ) {
+
+                  anuncios =
+                    dadosAnuncios.results;
+                }
+              }
+
+            } catch (erroAnuncios) {
+
+              console.error(
+                "Erro ao buscar anúncios do catálogo:",
+                erroAnuncios.message
+              );
+            }
+
+            const primeiro =
+              anuncios[0] || null;
+
+            const idAnuncio =
+              primeiro?.item_id ||
+              primeiro?.id ||
+              null;
+
+            let anuncioCompleto =
+              null;
+
+            let preco =
+              Number(
+                primeiro?.price || 0
+              );
+
+            let precoAnterior =
+              Number(
+                primeiro?.original_price || 0
+              );
+
+            if (idAnuncio) {
+
+              try {
+
+                const resultadoItem =
+                  await consultarAnuncio(
+                    idAnuncio
+                  );
+
+                if (
+                  resultadoItem.resposta.ok
+                ) {
+
+                  anuncioCompleto =
+                    resultadoItem.dados;
+
+                  preco =
+                    Number(
+                      anuncioCompleto.price ||
+                      preco ||
+                      0
+                    );
+
+                  precoAnterior =
+                    Number(
+                      anuncioCompleto.original_price ||
+                      precoAnterior ||
+                      0
+                    );
+                }
+
+              } catch (erroItemCatalogo) {
+
+                console.log(
+                  "Erro consultando anúncio do catálogo:",
+                  erroItemCatalogo.message
+                );
+              }
+            }
+
+            const titulo =
+              produto.name ||
+              produto.title ||
+              anuncioCompleto?.title ||
+              "Produto do Mercado Livre";
+
+            let imagem = "";
+
+            if (
+              Array.isArray(
+                produto.pictures
+              ) &&
+              produto.pictures.length > 0
+            ) {
+
+              imagem =
+                produto.pictures[0].url ||
+                produto.pictures[0].secure_url ||
+                "";
+            }
+
+            if (
+              !imagem &&
+              anuncioCompleto
+            ) {
+
+              imagem =
+                anuncioCompleto
+                  .pictures?.[0]?.url ||
+                anuncioCompleto.thumbnail ||
+                "";
+            }
+
+            const desconto =
+              precoAnterior > preco &&
+              preco > 0
+                ? Math.round(
+                    (
+                      1 -
+                      preco /
+                        precoAnterior
+                    ) * 100
+                  )
+                : 0;
+
+            return res.json({
+
+              id:
+                idAnuncio ||
+                idCatalogo,
+
+              titulo,
+
+              imagem,
+
+              preco,
+
+              precoAnterior:
+                precoAnterior > preco
+                  ? precoAnterior
+                  : null,
+
+              desconto,
+
+              linkAfiliado:
+                linkOriginal,
+
+              linkFinal:
+                linkOriginal
+            });
+          }
+
+        } catch (erroCatalogo) {
+
+          console.error(
+            "Erro ao processar catálogo:",
+            erroCatalogo.message
+          );
+        }
+      }
+
+      /*
+      =================================================
+      8. NOVA TENTATIVA DE MLB
+      =================================================
+
+      Depois de passar por MLBU e catálogo,
+      fazemos uma última busca no conteúdo.
+
+      */
+
+      const idsFinais =
+        encontrarTodosIds(
+          [
+            linkFinal,
+            htmlResolvido
+          ].join("\n")
+        );
+
+      console.log(
+        "IDs MLB encontrados na busca final:",
+        idsFinais
+      );
+
+      for (
+        const idProduto of idsFinais
+      ) {
+
+        try {
+
+          const resultado =
+            await consultarAnuncio(
+              idProduto
+            );
+
+          if (
+            resultado.resposta.ok
+          ) {
+
+            console.log(
+              "ANÚNCIO ENCONTRADO NA BUSCA FINAL:",
+              idProduto
+            );
+
+            return res.json(
+              montarDadosAnuncio(
+                resultado.dados,
+                linkOriginal
+              )
+            );
+          }
+
+        } catch (erroItem) {
+
+          console.log(
+            `Erro na busca final do MLB ${idProduto}:`,
+            erroItem.message
+          );
+        }
+      }
+
+      /*
+      =================================================
+      9. NENHUM PRODUTO IDENTIFICADO
+      =================================================
+      */
+
+      if (
+        userProducts.length > 0
+      ) {
+
+        return res.status(422).json({
+
+          error:
+            "O link contém um User Product do Mercado Livre, mas não foi possível localizar o anúncio MLB correspondente.",
+
+          detalhe:
+            "O Mercado Livre recusou o acesso direto ao User Product ou não forneceu um anúncio associado acessível.",
+
+          userProduct:
+            userProducts[0],
+
+          mlbsEncontrados:
+            idsFinais
+        });
+      }
+
+      return res.status(422).json({
 
         error:
-          "O Mercado Livre não permitiu consultar o anúncio encontrado.",
+          "Não consegui identificar o produto nesse link.",
 
         detalhe:
-          "O link foi analisado, mas nenhum dos anúncios encontrados pôde ser consultado pela API."
+          "Nenhum ID MLB acessível foi encontrado no link ou no conteúdo retornado pelo Mercado Livre.",
+
+        mlbsEncontrados:
+          idsFinais
       });
 
     } catch (erro) {
@@ -1842,7 +1950,7 @@ async function iniciarServidor() {
     () => {
 
       console.log(
-        `Ofertaco iniciado na porta ${PORT}`
+        `Ofertaço iniciado na porta ${PORT}`
       );
 
       console.log(
