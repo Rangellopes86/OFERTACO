@@ -12,9 +12,9 @@ let oauthCodeVerifier = null;
 let accessToken = null;
 
 /*
-====================================================
+=====================================================
 POSTGRESQL
-====================================================
+=====================================================
 */
 
 const pool = new Pool({
@@ -25,9 +25,9 @@ const pool = new Pool({
 });
 
 /*
-====================================================
+=====================================================
 BANCO
-====================================================
+=====================================================
 */
 
 async function inicializarBanco() {
@@ -55,16 +55,17 @@ async function inicializarBanco() {
 }
 
 /*
-====================================================
+=====================================================
 SALVAR TOKENS
-====================================================
+=====================================================
 */
 
 async function salvarTokens(dados) {
   try {
     const expiresAt =
       dados.expires_in
-        ? Date.now() + Number(dados.expires_in) * 1000
+        ? Date.now() +
+          Number(dados.expires_in) * 1000
         : null;
 
     await pool.query(
@@ -105,13 +106,15 @@ async function salvarTokens(dados) {
       ]
     );
 
-    accessToken = dados.access_token;
+    accessToken =
+      dados.access_token;
 
     console.log(
       "Tokens do Mercado Livre salvos no PostgreSQL."
     );
 
   } catch (erro) {
+
     console.error(
       "Erro ao salvar tokens:",
       erro.message
@@ -122,49 +125,58 @@ async function salvarTokens(dados) {
 }
 
 /*
-====================================================
+=====================================================
 RENOVAR ACCESS TOKEN
-====================================================
+=====================================================
 */
 
 async function renovarAccessToken(refreshToken) {
+
   try {
+
     console.log(
       "Solicitando renovação do access_token..."
     );
 
-    const resposta = await fetch(
-      "https://api.mercadolibre.com/oauth/token",
-      {
-        method: "POST",
+    const resposta =
+      await fetch(
+        "https://api.mercadolibre.com/oauth/token",
+        {
+          method: "POST",
 
-        headers: {
-          "Content-Type":
-            "application/x-www-form-urlencoded"
-        },
+          headers: {
+            "Content-Type":
+              "application/x-www-form-urlencoded"
+          },
 
-        body: new URLSearchParams({
-          grant_type: "refresh_token",
+          body:
+            new URLSearchParams({
+              grant_type:
+                "refresh_token",
 
-          client_id:
-            process.env.MELI_CLIENT_ID,
+              client_id:
+                process.env.MELI_CLIENT_ID,
 
-          client_secret:
-            process.env.MELI_CLIENT_SECRET,
+              client_secret:
+                process.env.MELI_CLIENT_SECRET,
 
-          refresh_token:
-            refreshToken
-        })
-      }
-    );
+              refresh_token:
+                refreshToken
+            })
+        }
+      );
 
-    const dados = await resposta.json();
+    const dados =
+      await resposta.json();
 
     console.log(
       "Resposta renovação OAuth:",
       {
-        status: resposta.status,
-        sucesso: !!dados.access_token
+        status:
+          resposta.status,
+
+        sucesso:
+          !!dados.access_token
       }
     );
 
@@ -172,6 +184,7 @@ async function renovarAccessToken(refreshToken) {
       !resposta.ok ||
       !dados.access_token
     ) {
+
       throw new Error(
         dados.message ||
         dados.error ||
@@ -188,6 +201,7 @@ async function renovarAccessToken(refreshToken) {
     return true;
 
   } catch (erro) {
+
     console.error(
       "Erro ao renovar access_token:",
       erro.message
@@ -198,26 +212,30 @@ async function renovarAccessToken(refreshToken) {
 }
 
 /*
-====================================================
+=====================================================
 CARREGAR TOKENS
-====================================================
+=====================================================
 */
 
 async function carregarTokens() {
+
   try {
-    const resultado = await pool.query(`
-      SELECT
-        access_token,
-        refresh_token,
-        expires_at
-      FROM oauth_tokens
-      WHERE id = 1
-      LIMIT 1
-    `);
+
+    const resultado =
+      await pool.query(`
+        SELECT
+          access_token,
+          refresh_token,
+          expires_at
+        FROM oauth_tokens
+        WHERE id = 1
+        LIMIT 1
+      `);
 
     if (
       resultado.rows.length === 0
     ) {
+
       console.log(
         "Nenhum token do Mercado Livre encontrado no banco."
       );
@@ -225,7 +243,8 @@ async function carregarTokens() {
       return false;
     }
 
-    const token = resultado.rows[0];
+    const token =
+      resultado.rows[0];
 
     accessToken =
       token.access_token;
@@ -238,6 +257,7 @@ async function carregarTokens() {
       token.expires_at &&
       token.refresh_token
     ) {
+
       const faltam =
         Number(token.expires_at) -
         Date.now();
@@ -245,6 +265,7 @@ async function carregarTokens() {
       if (
         faltam < 10 * 60 * 1000
       ) {
+
         console.log(
           "Token próximo de expirar. Renovando..."
         );
@@ -258,6 +279,7 @@ async function carregarTokens() {
     return true;
 
   } catch (erro) {
+
     console.error(
       "Erro ao carregar token do PostgreSQL:",
       erro.message
@@ -268,12 +290,13 @@ async function carregarTokens() {
 }
 
 /*
-====================================================
+=====================================================
 GARANTIR TOKEN
-====================================================
+=====================================================
 */
 
 async function garantirToken() {
+
   if (!accessToken) {
     await carregarTokens();
   }
@@ -282,9 +305,9 @@ async function garantirToken() {
 }
 
 /*
-====================================================
+=====================================================
 EXPRESS
-====================================================
+=====================================================
 */
 
 app.use(express.json());
@@ -294,18 +317,20 @@ app.use(
 );
 
 /*
-====================================================
+=====================================================
 UTILITÁRIOS
-====================================================
+=====================================================
 */
 
 function gerarCodeVerifier() {
+
   return crypto
     .randomBytes(32)
     .toString("base64url");
 }
 
 function gerarCodeChallenge(verifier) {
+
   return crypto
     .createHash("sha256")
     .update(verifier)
@@ -313,12 +338,13 @@ function gerarCodeChallenge(verifier) {
 }
 
 /*
-====================================================
+=====================================================
 ENCONTRAR IDs MLB
-====================================================
+=====================================================
 */
 
 function encontrarTodosIds(texto) {
+
   const valor =
     String(texto || "");
 
@@ -334,19 +360,35 @@ function encontrarTodosIds(texto) {
   return [
     ...new Set(
       resultados.map(
-        id => id.toUpperCase()
+        id =>
+          id.toUpperCase()
       )
     )
   ];
 }
 
 /*
-====================================================
-ENCONTRAR USER PRODUCTS MLBU
-====================================================
+=====================================================
+ENCONTRAR PRIMEIRO MLB
+=====================================================
+*/
+
+function encontrarId(texto) {
+
+  const ids =
+    encontrarTodosIds(texto);
+
+  return ids[0] || null;
+}
+
+/*
+=====================================================
+ENCONTRAR USER PRODUCT MLBU
+=====================================================
 */
 
 function encontrarTodosUserProducts(texto) {
+
   const valor =
     String(texto || "");
 
@@ -362,19 +404,35 @@ function encontrarTodosUserProducts(texto) {
   return [
     ...new Set(
       resultados.map(
-        id => id.toUpperCase()
+        id =>
+          id.toUpperCase()
       )
     )
   ];
 }
 
 /*
-====================================================
-EXTRAIR ID DE CATÁLOGO
-====================================================
+=====================================================
+PRIMEIRO USER PRODUCT
+=====================================================
+*/
+
+function encontrarUserProduct(texto) {
+
+  const ids =
+    encontrarTodosUserProducts(texto);
+
+  return ids[0] || null;
+}
+
+/*
+=====================================================
+EXTRAIR CATÁLOGO
+=====================================================
 */
 
 function extrairIdCatalogo(link) {
+
   const valor =
     String(link || "");
 
@@ -389,14 +447,15 @@ function extrairIdCatalogo(link) {
 }
 
 /*
-====================================================
-RESOLVER / LER PÁGINA DO MERCADO LIVRE
-====================================================
+=====================================================
+RESOLVER LINK
+=====================================================
 */
 
 async function resolverLink(link) {
+
   console.log(
-    "Abrindo página do Mercado Livre:",
+    "Resolvendo link:",
     link
   );
 
@@ -404,6 +463,7 @@ async function resolverLink(link) {
     String(link || "").trim();
 
   if (!urlAtual) {
+
     throw new Error(
       "Link vazio."
     );
@@ -417,18 +477,23 @@ async function resolverLink(link) {
     tentativa < 10;
     tentativa++
   ) {
+
     console.log(
-      `Tentativa ${tentativa + 1}:`,
+      `Tentativa de redirecionamento ${
+        tentativa + 1
+      }:`,
       urlAtual
     );
 
     let urlValida;
 
     try {
+
       urlValida =
         new URL(urlAtual);
 
     } catch (erroURL) {
+
       throw new Error(
         `URL inválida: ${urlAtual}`
       );
@@ -443,10 +508,11 @@ async function resolverLink(link) {
           redirect: "manual",
 
           headers: {
+
             "User-Agent":
               "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1",
 
-            Accept:
+            "Accept":
               "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 
             "Accept-Language":
@@ -459,20 +525,19 @@ async function resolverLink(link) {
       resposta.status;
 
     console.log(
-      "Status da página:",
+      "Status:",
       resposta.status
     );
 
     const location =
-      resposta.headers.get(
-        "location"
-      );
+      resposta.headers.get("location");
 
     if (
       resposta.status >= 300 &&
       resposta.status < 400 &&
       location
     ) {
+
       const proximaURL =
         new URL(
           location,
@@ -491,10 +556,12 @@ async function resolverLink(link) {
     }
 
     try {
+
       html =
         await resposta.text();
 
     } catch (erroTexto) {
+
       console.log(
         "Erro ao ler HTML:",
         erroTexto.message
@@ -508,12 +575,8 @@ async function resolverLink(link) {
       urlValida.toString()
     );
 
-    console.log(
-      "Tamanho do HTML:",
-      html.length
-    );
-
     return {
+
       status:
         statusFinal,
 
@@ -530,12 +593,13 @@ async function resolverLink(link) {
 }
 
 /*
-====================================================
+=====================================================
 CONSULTAR ANÚNCIO MLB
-====================================================
+=====================================================
 */
 
 async function consultarAnuncio(idProduto) {
+
   console.log(
     "Consultando anúncio:",
     idProduto
@@ -546,6 +610,7 @@ async function consultarAnuncio(idProduto) {
       `https://api.mercadolibre.com/items/${idProduto}`,
       {
         headers: {
+
           Authorization:
             `Bearer ${accessToken}`,
 
@@ -569,18 +634,21 @@ async function consultarAnuncio(idProduto) {
   );
 
   /*
-  Tentativa pública.
+  Tenta consulta pública se o token
+  for recusado.
   */
 
   if (
     resposta.status === 401 ||
     resposta.status === 403
   ) {
+
     console.log(
-      "Consulta autenticada recusada."
+      "Access token recusado. Tentando consulta pública..."
     );
 
     try {
+
       resposta =
         await fetch(
           `https://api.mercadolibre.com/items/${idProduto}`,
@@ -606,6 +674,7 @@ async function consultarAnuncio(idProduto) {
       );
 
     } catch (erroPublico) {
+
       console.error(
         "Erro na consulta pública:",
         erroPublico.message
@@ -620,14 +689,13 @@ async function consultarAnuncio(idProduto) {
 }
 
 /*
-====================================================
-CONSULTAR USER PRODUCT
-====================================================
+=====================================================
+CONSULTAR USER PRODUCT MLBU
+=====================================================
 */
 
-async function consultarUserProduct(
-  idUserProduct
-) {
+async function consultarUserProduct(idUserProduct) {
+
   console.log(
     "Consultando User Product:",
     idUserProduct
@@ -638,6 +706,7 @@ async function consultarUserProduct(
       `https://api.mercadolibre.com/user-products/${idUserProduct}`,
       {
         headers: {
+
           Authorization:
             `Bearer ${accessToken}`,
 
@@ -667,30 +736,30 @@ async function consultarUserProduct(
 }
 
 /*
-====================================================
-BUSCAR ANÚNCIOS POR USER PRODUCT
-====================================================
+=====================================================
+BUSCAR ANÚNCIOS ASSOCIADOS AO USER PRODUCT
+=====================================================
 */
 
 async function buscarAnunciosDoUserProduct(
   idUserProduct,
   sellerId
 ) {
+
   if (!sellerId) {
+
     console.log(
-      "Seller ID não informado."
+      "Não foi informado seller_id para buscar anúncios do User Product."
     );
 
     return [];
   }
 
   const url =
-    `https://api.mercadolibre.com/users/${sellerId}/items/search?user_product_id=${encodeURIComponent(
-      idUserProduct
-    )}`;
+    `https://api.mercadolibre.com/users/${sellerId}/items/search?user_product_id=${encodeURIComponent(idUserProduct)}`;
 
   console.log(
-    "BUSCANDO ANÚNCIOS DO USER PRODUCT:",
+    "Buscando anúncios associados:",
     url
   );
 
@@ -699,6 +768,7 @@ async function buscarAnunciosDoUserProduct(
       url,
       {
         headers: {
+
           Authorization:
             `Bearer ${accessToken}`,
 
@@ -722,11 +792,6 @@ async function buscarAnunciosDoUserProduct(
   );
 
   if (!resposta.ok) {
-    console.log(
-      "Busca por User Product falhou:",
-      resposta.status
-    );
-
     return [];
   }
 
@@ -735,6 +800,7 @@ async function buscarAnunciosDoUserProduct(
       dados.results
     )
   ) {
+
     return dados.results;
   }
 
@@ -742,31 +808,16 @@ async function buscarAnunciosDoUserProduct(
 }
 
 /*
-====================================================
-EXTRAIR POSSÍVEIS MLBs DE QUALQUER OBJETO
-====================================================
-*/
-
-function extrairMLBsDoObjeto(objeto) {
-  try {
-    return encontrarTodosIds(
-      JSON.stringify(objeto)
-    );
-  } catch (erro) {
-    return [];
-  }
-}
-
-/*
-====================================================
+=====================================================
 MONTAR DADOS DO ANÚNCIO
-====================================================
+=====================================================
 */
 
 function montarDadosAnuncio(
   dados,
   linkOriginal
 ) {
+
   const preco =
     Number(
       dados.price || 0
@@ -794,7 +845,25 @@ function montarDadosAnuncio(
     dados.thumbnail ||
     "";
 
+  console.log(
+    "DADOS FINAIS DO ANÚNCIO:",
+    {
+      id:
+        dados.id,
+
+      titulo:
+        dados.title,
+
+      preco,
+
+      precoAnterior,
+
+      desconto
+    }
+  );
+
   return {
+
     id:
       dados.id,
 
@@ -822,15 +891,91 @@ function montarDadosAnuncio(
 }
 
 /*
-====================================================
-OAUTH
-====================================================
+=====================================================
+MONTAR USER PRODUCT
+=====================================================
+*/
+
+function montarDadosUserProduct(
+  dados,
+  anuncio,
+  linkOriginal
+) {
+
+  /*
+  Se conseguimos um anúncio MLB,
+  usamos os dados dele.
+  */
+
+  if (anuncio) {
+
+    const resultado =
+      montarDadosAnuncio(
+        anuncio,
+        linkOriginal
+      );
+
+    /*
+    Mantém o título do anúncio,
+    mas informa o User Product.
+    */
+
+    resultado.userProductId =
+      dados.id || null;
+
+    return resultado;
+  }
+
+  /*
+  Caso não exista anúncio associado
+  que possamos consultar.
+  */
+
+  return {
+
+    id:
+      dados.id,
+
+    titulo:
+      dados.name ||
+      "Produto do Mercado Livre",
+
+    imagem:
+      dados.pictures?.[0]?.url ||
+      "",
+
+    preco:
+      0,
+
+    precoAnterior:
+      null,
+
+    desconto:
+      0,
+
+    linkAfiliado:
+      linkOriginal,
+
+    linkFinal:
+      linkOriginal,
+
+    userProductId:
+      dados.id
+  };
+}
+
+/*
+=====================================================
+OAUTH - AUTORIZAÇÃO
+=====================================================
 */
 
 app.get(
   "/oauth/authorize",
   (req, res) => {
+
     try {
+
       const verifier =
         gerarCodeVerifier();
 
@@ -844,6 +989,7 @@ app.get(
 
       const params =
         new URLSearchParams({
+
           response_type:
             "code",
 
@@ -866,6 +1012,7 @@ app.get(
       );
 
     } catch (erro) {
+
       console.error(
         "Erro ao iniciar OAuth:",
         erro
@@ -879,19 +1026,22 @@ app.get(
 );
 
 /*
-====================================================
+=====================================================
 OAUTH CALLBACK
-====================================================
+=====================================================
 */
 
 app.get(
   "/oauth/callback",
   async (req, res) => {
+
     try {
+
       const code =
         req.query.code;
 
       if (!code) {
+
         return res
           .status(400)
           .send(`
@@ -901,6 +1051,7 @@ app.get(
       }
 
       if (!oauthCodeVerifier) {
+
         return res
           .status(400)
           .send(`
@@ -922,6 +1073,7 @@ app.get(
 
             body:
               new URLSearchParams({
+
                 grant_type:
                   "authorization_code",
 
@@ -963,6 +1115,7 @@ app.get(
         !resposta.ok ||
         !dados.access_token
       ) {
+
         return res
           .status(400)
           .send(`
@@ -972,12 +1125,14 @@ app.get(
           `);
       }
 
-      await salvarTokens(
-        dados
-      );
+      await salvarTokens(dados);
 
       oauthCodeVerifier =
         null;
+
+      console.log(
+        "OAuth conectado e salvo no PostgreSQL."
+      );
 
       res.send(`
         <h2>Ofertaço conectado com sucesso! 🎉</h2>
@@ -987,6 +1142,7 @@ app.get(
       `);
 
     } catch (erro) {
+
       console.error(
         "Erro OAuth:",
         erro
@@ -1002,21 +1158,24 @@ app.get(
 );
 
 /*
-====================================================
+=====================================================
 API DO PRODUTO
-====================================================
+=====================================================
 */
 
 app.post(
   "/api/product",
   async (req, res) => {
+
     try {
+
       const linkOriginal =
         String(
           req.body?.url || ""
         ).trim();
 
       if (!linkOriginal) {
+
         return res.status(400).json({
           error:
             "Cole o link do Mercado Livre."
@@ -1027,6 +1186,7 @@ app.post(
         await garantirToken();
 
       if (!conectado) {
+
         return res.status(401).json({
           error:
             "O Ofertaço ainda não está conectado ao Mercado Livre."
@@ -1044,7 +1204,7 @@ app.post(
 
       /*
       =================================================
-      1. SEMPRE ABRIR A PÁGINA
+      1. RESOLVER LINK
       =================================================
       */
 
@@ -1054,59 +1214,63 @@ app.post(
       let htmlResolvido =
         "";
 
-      try {
-        const resolvido =
-          await resolverLink(
-            linkOriginal
+      /*
+      Para links meli.la,
+      precisamos resolver o redirecionamento.
+      */
+
+      if (
+        linkOriginal
+          .toLowerCase()
+          .includes("meli.la/")
+      ) {
+
+        console.log(
+          "Link curto detectado. Resolvendo..."
+        );
+
+        try {
+
+          const resolvido =
+            await resolverLink(
+              linkOriginal
+            );
+
+          linkFinal =
+            resolvido.urlFinal;
+
+          htmlResolvido =
+            resolvido.html;
+
+          console.log(
+            "Link após redirecionamento:",
+            linkFinal
           );
 
-        linkFinal =
-          resolvido.urlFinal;
+        } catch (erroLink) {
 
-        htmlResolvido =
-          resolvido.html;
+          return res.status(400).json({
 
-        console.log(
-          "URL FINAL:",
-          linkFinal
-        );
+            error:
+              "Não foi possível abrir o link de afiliado do Mercado Livre.",
 
-      } catch (erroLink) {
-        console.log(
-          "Não foi possível ler a página diretamente:",
-          erroLink.message
-        );
-
-        /*
-        Não interrompe.
-        O código ainda tentará trabalhar
-        com o próprio link.
-        */
+            detalhe:
+              erroLink.message
+          });
+        }
       }
 
       /*
       =================================================
-      2. ANALISAR LINK + HTML
+      2. IDENTIFICAR MLBU
       =================================================
       */
 
       const textoInicial =
         [
-          linkOriginal,
           linkFinal,
           htmlResolvido
         ].join("\n");
-
-      console.log(
-        "Tamanho total para análise:",
-        textoInicial.length
-      );
-
-      /*
-      =================================================
-      3. ENCONTRAR MLBU
-      =================================================
-      */
 
       const userProducts =
         encontrarTodosUserProducts(
@@ -1114,145 +1278,85 @@ app.post(
         );
 
       console.log(
-        "USER PRODUCTS ENCONTRADOS:",
+        "USER PRODUCTS MLBU ENCONTRADOS:",
         userProducts
       );
 
       /*
       =================================================
-      4. ENCONTRAR MLB DIRETAMENTE
+      3. PROCESSAR USER PRODUCT
       =================================================
       */
 
-      let idsEncontrados =
-        encontrarTodosIds(
-          textoInicial
-        );
-
-      console.log(
-        "MLBs ENCONTRADOS NO LINK/HTML:",
-        idsEncontrados
-      );
-
-      /*
-      =================================================
-      5. TESTAR MLBs ENCONTRADOS DIRETAMENTE
-      =================================================
-      */
-
-      for (
-        const idProduto of idsEncontrados
+      if (
+        userProducts.length > 0
       ) {
-        try {
-          console.log(
-            "TESTANDO MLB ENCONTRADO NA PÁGINA:",
-            idProduto
-          );
 
-          const resultado =
-            await consultarAnuncio(
-              idProduto
-            );
+        for (
+          const idUserProduct of userProducts
+        ) {
 
-          if (
-            resultado.resposta.ok
-          ) {
-            console.log(
-              "ANÚNCIO ENCONTRADO DIRETAMENTE:",
-              idProduto
-            );
+          try {
 
-            return res.json(
-              montarDadosAnuncio(
-                resultado.dados,
-                linkOriginal
-              )
-            );
-          }
+            const resultadoUP =
+              await consultarUserProduct(
+                idUserProduct
+              );
 
-        } catch (erroItem) {
-          console.log(
-            `Erro consultando ${idProduto}:`,
-            erroItem.message
-          );
-        }
-      }
+            if (
+              !resultadoUP.resposta.ok
+            ) {
 
-      /*
-      =================================================
-      6. PROCESSAR USER PRODUCT
-      =================================================
-      */
+              console.log(
+                `User Product ${idUserProduct} retornou status ${resultadoUP.resposta.status}`
+              );
 
-      for (
-        const idUserProduct of userProducts
-      ) {
-        try {
-          console.log(
-            "PROCESSANDO USER PRODUCT:",
-            idUserProduct
-          );
+              continue;
+            }
 
-          const resultadoUP =
-            await consultarUserProduct(
-              idUserProduct
-            );
-
-          console.log(
-            "STATUS USER PRODUCT:",
-            resultadoUP.resposta.status
-          );
-
-          /*
-          Se o endpoint respondeu corretamente,
-          usamos os dados retornados.
-          */
-
-          if (
-            resultadoUP.resposta.ok
-          ) {
             const dadosUP =
               resultadoUP.dados;
 
-            console.log(
-              "DADOS DO USER PRODUCT:",
-              dadosUP
-            );
-
             /*
-            Seller ID oficial do User Product.
+            Seller/user associado ao UP.
             */
 
             const sellerId =
               dadosUP.user_id ||
               dadosUP.seller_id ||
-              dadosUP.user?.id ||
-              dadosUP.seller?.id ||
               null;
 
             console.log(
-              "SELLER ID:",
+              "SELLER ID DO USER PRODUCT:",
               sellerId
             );
 
             /*
-            Procura MLBs dentro da resposta.
+            Busca anúncios MLB associados
+            ao User Product.
             */
 
-            const mlbsDoUP =
-              extrairMLBsDoObjeto(
-                dadosUP
+            const idsAnuncios =
+              await buscarAnunciosDoUserProduct(
+                idUserProduct,
+                sellerId
               );
 
             console.log(
-              "MLBs DENTRO DO USER PRODUCT:",
-              mlbsDoUP
+              "ANÚNCIOS ASSOCIADOS AO USER PRODUCT:",
+              idsAnuncios
             );
 
+            /*
+            Tenta consultar os anúncios encontrados.
+            */
+
             for (
-              const idAnuncio of mlbsDoUP
+              const idAnuncio of idsAnuncios
             ) {
+
               try {
+
                 const resultadoItem =
                   await consultarAnuncio(
                     idAnuncio
@@ -1261,6 +1365,12 @@ app.post(
                 if (
                   resultadoItem.resposta.ok
                 ) {
+
+                  console.log(
+                    "ANÚNCIO ENCONTRADO VIA USER PRODUCT:",
+                    idAnuncio
+                  );
+
                   return res.json(
                     montarDadosAnuncio(
                       resultadoItem.dados,
@@ -1270,82 +1380,59 @@ app.post(
                 }
 
               } catch (erroItem) {
+
                 console.log(
-                  `Erro consultando MLB ${idAnuncio}:`,
+                  `Erro consultando anúncio ${idAnuncio}:`,
                   erroItem.message
                 );
               }
             }
 
             /*
-            Busca oficial dos anúncios
-            associados ao User Product.
+            Se o UP foi encontrado mas
+            não conseguimos acessar um MLB,
+            retornamos os dados básicos.
             */
 
-            if (sellerId) {
-              const anuncios =
-                await buscarAnunciosDoUserProduct(
-                  idUserProduct,
-                  sellerId
-                );
+            console.log(
+              "User Product encontrado, mas nenhum anúncio MLB pôde ser consultado."
+            );
 
-              console.log(
-                "RESULTADO DA BUSCA POR USER PRODUCT:",
-                anuncios
+            const respostaUP =
+              montarDadosUserProduct(
+                dadosUP,
+                null,
+                linkOriginal
               );
 
-              for (
-                const idAnuncio of anuncios
-              ) {
-                try {
-                  const resultadoItem =
-                    await consultarAnuncio(
-                      idAnuncio
-                    );
+            /*
+            Não retornamos imediatamente com
+            preço 0 se ainda houver outros
+            IDs para tentar.
+            */
 
-                  if (
-                    resultadoItem.resposta.ok
-                  ) {
-                    console.log(
-                      "ANÚNCIO ENCONTRADO VIA USER PRODUCT:",
-                      idAnuncio
-                    );
+            if (
+              userProducts.length === 1
+            ) {
 
-                    return res.json(
-                      montarDadosAnuncio(
-                        resultadoItem.dados,
-                        linkOriginal
-                      )
-                    );
-                  }
-
-                } catch (erroItem) {
-                  console.log(
-                    `Erro consultando ${idAnuncio}:`,
-                    erroItem.message
-                  );
-                }
-              }
+              return res.json(
+                respostaUP
+              );
             }
 
-          } else {
-            console.log(
-              "Mercado Livre não permitiu consultar o User Product:",
-              resultadoUP.resposta.status
+          } catch (erroUP) {
+
+            console.error(
+              `Erro processando User Product ${idUserProduct}:`,
+              erroUP.message
             );
           }
-
-        } catch (erroUP) {
-          console.error(
-            `Erro processando ${idUserProduct}:`,
-            erroUP.message
-          );
         }
       }
 
       /*
       =================================================
-      7. CATÁLOGO
+      4. CATÁLOGO
       =================================================
       */
 
@@ -1355,272 +1442,278 @@ app.post(
         );
 
       console.log(
-        "ID DE CATÁLOGO:",
+        "Product ID de catálogo:",
         idCatalogo
       );
 
       if (idCatalogo) {
-        try {
-          const respostaProduto =
-            await fetch(
-              `https://api.mercadolibre.com/products/${idCatalogo}`,
-              {
-                headers: {
-                  Authorization:
-                    `Bearer ${accessToken}`,
 
-                  Accept:
-                    "application/json"
-                }
-              }
-            );
-
-          const produto =
-            await respostaProduto.json();
-
-          console.log(
-            "RESPOSTA PRODUCTS:",
+        const respostaProduto =
+          await fetch(
+            `https://api.mercadolibre.com/products/${idCatalogo}`,
             {
-              status:
-                respostaProduto.status,
+              headers: {
 
-              dados:
-                produto
+                Authorization:
+                  `Bearer ${accessToken}`,
+
+                Accept:
+                  "application/json"
+              }
             }
           );
 
-          if (
-            respostaProduto.ok
-          ) {
-            let anuncios = [];
+        const produto =
+          await respostaProduto.json();
 
-            try {
-              const respostaAnuncios =
-                await fetch(
-                  `https://api.mercadolibre.com/products/${idCatalogo}/items`,
-                  {
-                    headers: {
-                      Authorization:
-                        `Bearer ${accessToken}`,
+        console.log(
+          "RESPOSTA PRODUCTS:",
+          {
+            status:
+              respostaProduto.status,
 
-                      Accept:
-                        "application/json"
-                    }
-                  }
-                );
+            dados:
+              produto
+          }
+        );
 
-              const dadosAnuncios =
-                await respostaAnuncios.json();
+        if (
+          respostaProduto.ok
+        ) {
 
-              console.log(
-                "RESPOSTA PRODUCTS ITEMS:",
+          let anuncios = [];
+
+          try {
+
+            const respostaAnuncios =
+              await fetch(
+                `https://api.mercadolibre.com/products/${idCatalogo}/items`,
                 {
-                  status:
-                    respostaAnuncios.status,
+                  headers: {
 
-                  dados:
-                    dadosAnuncios
+                    Authorization:
+                      `Bearer ${accessToken}`,
+
+                    Accept:
+                      "application/json"
+                  }
                 }
               );
 
-              if (
-                respostaAnuncios.ok
-              ) {
-                if (
-                  Array.isArray(
-                    dadosAnuncios
-                  )
-                ) {
-                  anuncios =
-                    dadosAnuncios;
+            const dadosAnuncios =
+              await respostaAnuncios.json();
 
-                } else if (
-                  Array.isArray(
-                    dadosAnuncios.results
-                  )
-                ) {
-                  anuncios =
-                    dadosAnuncios.results;
-                }
-              }
-
-            } catch (erroAnuncios) {
-              console.error(
-                "Erro ao buscar anúncios:",
-                erroAnuncios.message
-              );
-            }
-
-            const primeiro =
-              anuncios[0] || null;
-
-            const idAnuncio =
-              primeiro?.item_id ||
-              primeiro?.id ||
-              null;
-
-            let anuncioCompleto =
-              null;
-
-            let preco =
-              Number(
-                primeiro?.price || 0
-              );
-
-            let precoAnterior =
-              Number(
-                primeiro?.original_price || 0
-              );
-
-            if (idAnuncio) {
-              const resultadoItem =
-                await consultarAnuncio(
-                  idAnuncio
-                );
+            if (
+              respostaAnuncios.ok
+            ) {
 
               if (
-                resultadoItem.resposta.ok
+                Array.isArray(
+                  dadosAnuncios
+                )
               ) {
-                anuncioCompleto =
-                  resultadoItem.dados;
 
-                preco =
-                  Number(
-                    anuncioCompleto.price ||
-                    preco ||
-                    0
-                  );
+                anuncios =
+                  dadosAnuncios;
 
-                precoAnterior =
-                  Number(
-                    anuncioCompleto.original_price ||
-                    precoAnterior ||
-                    0
-                  );
+              } else if (
+                Array.isArray(
+                  dadosAnuncios.results
+                )
+              ) {
+
+                anuncios =
+                  dadosAnuncios.results;
               }
             }
 
-            const titulo =
-              produto.name ||
-              produto.title ||
-              anuncioCompleto?.title ||
-              "Produto do Mercado Livre";
+          } catch (erroAnuncios) {
 
-            let imagem = "";
-
-            if (
-              Array.isArray(
-                produto.pictures
-              ) &&
-              produto.pictures.length > 0
-            ) {
-              imagem =
-                produto.pictures[0].url ||
-                produto.pictures[0].secure_url ||
-                "";
-            }
-
-            if (
-              !imagem &&
-              anuncioCompleto
-            ) {
-              imagem =
-                anuncioCompleto
-                  .pictures?.[0]?.url ||
-                anuncioCompleto.thumbnail ||
-                "";
-            }
-
-            const desconto =
-              precoAnterior > preco &&
-              preco > 0
-                ? Math.round(
-                    (
-                      1 -
-                      preco /
-                        precoAnterior
-                    ) * 100
-                  )
-                : 0;
-
-            return res.json({
-              id:
-                idAnuncio ||
-                idCatalogo,
-
-              titulo,
-
-              imagem,
-
-              preco,
-
-              precoAnterior:
-                precoAnterior > preco
-                  ? precoAnterior
-                  : null,
-
-              desconto,
-
-              linkAfiliado:
-                linkOriginal,
-
-              linkFinal:
-                linkOriginal
-            });
+            console.error(
+              "Erro ao buscar anúncios:",
+              erroAnuncios.message
+            );
           }
 
-        } catch (erroCatalogo) {
-          console.error(
-            "Erro ao processar catálogo:",
-            erroCatalogo.message
-          );
+          const primeiro =
+            anuncios[0] || null;
+
+          const idAnuncio =
+            primeiro?.item_id ||
+            primeiro?.id ||
+            null;
+
+          let anuncioCompleto =
+            null;
+
+          let preco =
+            Number(
+              primeiro?.price || 0
+            );
+
+          let precoAnterior =
+            Number(
+              primeiro?.original_price || 0
+            );
+
+          if (idAnuncio) {
+
+            const resultadoItem =
+              await consultarAnuncio(
+                idAnuncio
+              );
+
+            if (
+              resultadoItem.resposta.ok
+            ) {
+
+              anuncioCompleto =
+                resultadoItem.dados;
+
+              preco =
+                Number(
+                  anuncioCompleto.price ||
+                  preco ||
+                  0
+                );
+
+              precoAnterior =
+                Number(
+                  anuncioCompleto.original_price ||
+                  precoAnterior ||
+                  0
+                );
+            }
+          }
+
+          const titulo =
+            produto.name ||
+            produto.title ||
+            anuncioCompleto?.title ||
+            "Produto do Mercado Livre";
+
+          let imagem = "";
+
+          if (
+            Array.isArray(
+              produto.pictures
+            ) &&
+            produto.pictures.length > 0
+          ) {
+
+            imagem =
+              produto.pictures[0].url ||
+              produto.pictures[0].secure_url ||
+              "";
+          }
+
+          if (
+            !imagem &&
+            anuncioCompleto
+          ) {
+
+            imagem =
+              anuncioCompleto
+                .pictures?.[0]?.url ||
+              anuncioCompleto.thumbnail ||
+              "";
+          }
+
+          const desconto =
+            precoAnterior > preco &&
+            preco > 0
+              ? Math.round(
+                  (
+                    1 -
+                    preco /
+                      precoAnterior
+                  ) * 100
+                )
+              : 0;
+
+          return res.json({
+
+            id:
+              idAnuncio ||
+              idCatalogo,
+
+            titulo,
+
+            imagem,
+
+            preco,
+
+            precoAnterior:
+              precoAnterior > preco
+                ? precoAnterior
+                : null,
+
+            desconto,
+
+            linkAfiliado:
+              linkOriginal,
+
+            linkFinal:
+              linkOriginal
+          });
         }
       }
 
       /*
       =================================================
-      8. SEGUNDA TENTATIVA DE MLB
+      5. ENCONTRAR IDs MLB
       =================================================
       */
 
-      idsEncontrados =
+      const textoParaAnalise =
+        [
+          linkFinal,
+          htmlResolvido
+        ].join("\n");
+
+      const idsEncontrados =
         encontrarTodosIds(
-          [
-            linkOriginal,
-            linkFinal,
-            htmlResolvido
-          ].join("\n")
+          textoParaAnalise
         );
 
       console.log(
-        "SEGUNDA LISTA DE MLBs:",
+        "IDs MLB encontrados:",
         idsEncontrados
       );
 
       if (
         idsEncontrados.length === 0
       ) {
+
         return res.status(422).json({
+
           error:
             "Não consegui identificar o produto nesse link.",
 
           detalhe:
             userProducts.length > 0
-              ? "O User Product foi identificado, mas nenhum anúncio MLB pôde ser localizado."
+              ? "O User Product foi identificado, mas não foi possível obter um anúncio associado."
               : "Nenhum ID MLB ou MLBU foi encontrado."
         });
       }
 
       /*
       =================================================
-      9. ÚLTIMA TENTATIVA
+      6. TESTAR CADA MLB
       =================================================
       */
 
       for (
         const idProduto of idsEncontrados
       ) {
+
+        console.log(
+          "Tentando consultar ID:",
+          idProduto
+        );
+
         try {
+
           const resultado =
             await consultarAnuncio(
               idProduto
@@ -1629,6 +1722,12 @@ app.post(
           if (
             resultado.resposta.ok
           ) {
+
+            console.log(
+              "ANÚNCIO ENCONTRADO:",
+              idProduto
+            );
+
             return res.json(
               montarDadosAnuncio(
                 resultado.dados,
@@ -1637,7 +1736,12 @@ app.post(
             );
           }
 
+          console.log(
+            `ID ${idProduto} não pôde ser consultado. Status: ${resultado.resposta.status}`
+          );
+
         } catch (erroItem) {
+
           console.log(
             `Erro consultando ${idProduto}:`,
             erroItem.message
@@ -1647,25 +1751,28 @@ app.post(
 
       /*
       =================================================
-      10. NENHUM ANÚNCIO
+      7. NENHUM ANÚNCIO FUNCIONOU
       =================================================
       */
 
       return res.status(403).json({
+
         error:
           "O Mercado Livre não permitiu consultar o anúncio encontrado.",
 
         detalhe:
-          "O produto foi identificado, mas nenhum anúncio pôde ser consultado pela API."
+          "O link foi analisado, mas nenhum dos anúncios encontrados pôde ser consultado pela API."
       });
 
     } catch (erro) {
+
       console.error(
         "ERRO API PRODUTO:",
         erro
       );
 
       return res.status(500).json({
+
         error:
           "Não foi possível consultar o produto.",
 
@@ -1677,25 +1784,31 @@ app.post(
 );
 
 /*
-====================================================
+=====================================================
 HEALTH
-====================================================
+=====================================================
 */
 
 app.get(
   "/health",
   async (req, res) => {
-    let conectado = false;
+
+    let conectado =
+      false;
 
     try {
+
       conectado =
         await garantirToken();
 
     } catch (erro) {
-      conectado = false;
+
+      conectado =
+        false;
     }
 
     res.json({
+
       status:
         "OK",
 
@@ -1712,12 +1825,13 @@ app.get(
 );
 
 /*
-====================================================
+=====================================================
 INICIALIZAÇÃO
-====================================================
+=====================================================
 */
 
 async function iniciarServidor() {
+
   await inicializarBanco();
 
   await carregarTokens();
@@ -1726,8 +1840,9 @@ async function iniciarServidor() {
     PORT,
     "0.0.0.0",
     () => {
+
       console.log(
-        `Ofertaço iniciado na porta ${PORT}`
+        `Ofertaco iniciado na porta ${PORT}`
       );
 
       console.log(
