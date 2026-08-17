@@ -43,7 +43,9 @@ function encontrarId(texto) {
 }
 
 function extrairIdCatalogo(link) {
-  const resultado = String(link || "").match(
+  const valor = String(link || "");
+
+  const resultado = valor.match(
     /\/p\/(MLB\d{6,})/i
   );
 
@@ -61,28 +63,143 @@ ABRIR LINK E SEGUIR REDIRECIONAMENTOS
 async function resolverLink(link) {
   console.log("Resolvendo link:", link);
 
-  const resposta = await fetch(link, {
-    method: "GET",
-    redirect: "follow",
-    headers: {
-      "User-Agent":
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1",
-      "Accept":
-        "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "pt-BR,pt;q=0.9"
+  let urlAtual = String(link || "").trim();
+
+  if (!urlAtual) {
+    throw new Error("Link vazio.");
+  }
+
+  let html = "";
+  let statusFinal = 0;
+
+  /*
+  Seguimos os redirecionamentos manualmente.
+  Isso é mais confiável para links meli.la.
+  */
+
+  for (let tentativa = 0; tentativa < 10; tentativa++) {
+
+    console.log(
+      `Tentativa de redirecionamento ${tentativa + 1}:`,
+      urlAtual
+    );
+
+    let urlValida;
+
+    try {
+      urlValida = new URL(urlAtual);
+    } catch (erroURL) {
+      console.error(
+        "URL inválida durante resolução:",
+        urlAtual
+      );
+
+      throw new Error(
+        `URL inválida: ${urlAtual}`
+      );
     }
-  });
 
-  const html = await resposta.text();
+    const resposta = await fetch(
+      urlValida.toString(),
+      {
+        method: "GET",
+        redirect: "manual",
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1",
 
-  console.log("Status ao resolver link:", resposta.status);
-  console.log("URL final:", resposta.url);
+          "Accept":
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 
-  return {
-    status: resposta.status,
-    urlFinal: resposta.url,
-    html
-  };
+          "Accept-Language":
+            "pt-BR,pt;q=0.9"
+        }
+      }
+    );
+
+    statusFinal = resposta.status;
+
+    console.log(
+      "Status:",
+      resposta.status
+    );
+
+    /*
+    Verifica se o servidor mandou
+    para outra URL.
+    */
+
+    const location =
+      resposta.headers.get("location");
+
+    if (
+      resposta.status >= 300 &&
+      resposta.status < 400 &&
+      location
+    ) {
+
+      let proximaURL;
+
+      try {
+
+        proximaURL =
+          new URL(
+            location,
+            urlValida
+          ).toString();
+
+      } catch (erroURL) {
+
+        console.error(
+          "Erro ao interpretar Location:",
+          location
+        );
+
+        throw new Error(
+          `Redirecionamento inválido recebido pelo Mercado Livre: ${location}`
+        );
+      }
+
+      console.log(
+        "Redirecionando para:",
+        proximaURL
+      );
+
+      urlAtual = proximaURL;
+
+      continue;
+    }
+
+    /*
+    Chegamos à página final.
+    */
+
+    try {
+      html = await resposta.text();
+    } catch (erroTexto) {
+      console.log(
+        "Não foi possível ler HTML:",
+        erroTexto.message
+      );
+
+      html = "";
+    }
+
+    console.log(
+      "URL final:",
+      urlValida.toString()
+    );
+
+    return {
+      status: statusFinal,
+      urlFinal: urlValida.toString(),
+      html
+    };
+  }
+
+  throw new Error(
+    "O link apresentou muitos redirecionamentos."
+  );
 }
 
 /*
@@ -112,7 +229,10 @@ app.get("/oauth/authorize", (req, res) => {
     );
 
   } catch (erro) {
-    console.error("Erro ao iniciar OAuth:", erro);
+    console.error(
+      "Erro ao iniciar OAuth:",
+      erro
+    );
 
     res.status(500).send(
       "<h2>Erro no OAuth</h2><p>Não foi possível iniciar a autorização.</p>"
@@ -160,20 +280,31 @@ app.get("/oauth/callback", async (req, res) => {
 
     const dados = await resposta.json();
 
-    console.log("Resposta OAuth:", {
-      status: resposta.status,
-      dados: {
-        ...dados,
-        access_token: dados.access_token
-          ? "[RECEBIDO]"
-          : undefined,
-        refresh_token: dados.refresh_token
-          ? "[RECEBIDO]"
-          : undefined
-      }
-    });
+    console.log(
+      "Resposta OAuth:",
+      {
+        status: resposta.status,
+        dados: {
+          ...dados,
 
-    if (!resposta.ok || !dados.access_token) {
+          access_token:
+            dados.access_token
+              ? "[RECEBIDO]"
+              : undefined,
+
+          refresh_token:
+            dados.refresh_token
+              ? "[RECEBIDO]"
+              : undefined
+        }
+      }
+    );
+
+    if (
+      !resposta.ok ||
+      !dados.access_token
+    ) {
+
       return res.status(400).send(`
         <h2>Erro ao obter autorização</h2>
         <p>O Mercado Livre não devolveu o token de acesso.</p>
@@ -181,7 +312,9 @@ app.get("/oauth/callback", async (req, res) => {
       `);
     }
 
-    accessToken = dados.access_token;
+    accessToken =
+      dados.access_token;
+
     oauthCodeVerifier = null;
 
     console.log(
@@ -195,7 +328,11 @@ app.get("/oauth/callback", async (req, res) => {
     `);
 
   } catch (erro) {
-    console.error("Erro OAuth:", erro);
+
+    console.error(
+      "Erro OAuth:",
+      erro
+    );
 
     res.status(500).send(`
       <h2>Erro no OAuth</h2>
@@ -211,420 +348,630 @@ API DO PRODUTO
 =====================================================
 */
 
-app.post("/api/product", async (req, res) => {
-  try {
+app.post(
+  "/api/product",
+  async (req, res) => {
 
-    const linkOriginal =
-      String(req.body?.url || "").trim();
+    try {
 
-    if (!linkOriginal) {
-      return res.status(400).json({
-        error:
-          "Cole o link do Mercado Livre."
-      });
-    }
+      const linkOriginal =
+        String(
+          req.body?.url || ""
+        ).trim();
 
-    if (!accessToken) {
-      return res.status(401).json({
-        error:
-          "O Ofertaço ainda não está conectado ao Mercado Livre."
-      });
-    }
-
-    console.log(
-      "================================================"
-    );
-
-    console.log(
-      "LINK RECEBIDO:",
-      linkOriginal
-    );
-
-    /*
-    =================================================
-    1. RESOLVE LINKS CURTOS MELI.LA
-    =================================================
-    */
-
-    let linkFinal = linkOriginal;
-
-    if (
-      linkOriginal.includes("meli.la/")
-    ) {
-
-      console.log(
-        "Link curto detectado. Resolvendo..."
-      );
-
-      try {
-
-        const resolvido =
-          await resolverLink(linkOriginal);
-
-        if (resolvido.urlFinal) {
-          linkFinal =
-            resolvido.urlFinal;
-        }
-
-        console.log(
-          "Link após redirecionamento:",
-          linkFinal
-        );
-
-      } catch (erroLink) {
-
-        console.error(
-          "Erro ao resolver meli.la:",
-          erroLink
-        );
+      if (!linkOriginal) {
 
         return res.status(400).json({
           error:
-            "Não foi possível abrir o link de afiliado do Mercado Livre.",
-          detalhe:
-            erroLink.message
+            "Cole o link do Mercado Livre."
         });
       }
-    }
 
-    /*
-    =================================================
-    2. PROCURA ID DE CATÁLOGO
-    =================================================
-    */
+      if (!accessToken) {
 
-    let idCatalogo =
-      extrairIdCatalogo(linkFinal);
-
-    /*
-    Também tenta encontrar MLB no HTML
-    caso o redirecionamento não deixe o ID
-    diretamente na URL.
-    */
-
-    if (!idCatalogo) {
-
-      try {
-
-        const pagina =
-          await resolverLink(linkFinal);
-
-        idCatalogo =
-          extrairIdCatalogo(
-            pagina.urlFinal
-          );
-
-        if (!idCatalogo) {
-          idCatalogo =
-            encontrarId(
-              pagina.urlFinal +
-              "\n" +
-              pagina.html
-            );
-        }
-
-      } catch (erroPagina) {
-
-        console.log(
-          "Não foi possível analisar a página final:",
-          erroPagina.message
-        );
+        return res.status(401).json({
+          error:
+            "O Ofertaço ainda não está conectado ao Mercado Livre."
+        });
       }
-    }
-
-    console.log(
-      "Product ID de catálogo:",
-      idCatalogo
-    );
-
-    /*
-    =================================================
-    3. PRODUTO DE CATÁLOGO
-    =================================================
-    */
-
-    if (idCatalogo) {
-
-      const respostaProduto =
-        await fetch(
-          `https://api.mercadolibre.com/products/${idCatalogo}`,
-          {
-            headers: {
-              Authorization:
-                `Bearer ${accessToken}`,
-              Accept:
-                "application/json"
-            }
-          }
-        );
-
-      const produto =
-        await respostaProduto.json();
 
       console.log(
-        "RESPOSTA PRODUCTS:",
-        {
-          status:
-            respostaProduto.status,
-          dados:
-            produto
-        }
+        "================================================"
       );
 
-      if (!respostaProduto.ok) {
-        return res
-          .status(respostaProduto.status)
-          .json({
+      console.log(
+        "LINK RECEBIDO:",
+        linkOriginal
+      );
+
+      /*
+      =================================================
+      1. RESOLVE LINKS CURTOS MELI.LA
+      =================================================
+      */
+
+      let linkFinal =
+        linkOriginal;
+
+      if (
+        linkOriginal
+          .toLowerCase()
+          .includes("meli.la/")
+      ) {
+
+        console.log(
+          "Link curto detectado. Resolvendo..."
+        );
+
+        try {
+
+          const resolvido =
+            await resolverLink(
+              linkOriginal
+            );
+
+          if (
+            resolvido.urlFinal
+          ) {
+
+            linkFinal =
+              resolvido.urlFinal;
+          }
+
+          console.log(
+            "Link após redirecionamento:",
+            linkFinal
+          );
+
+          /*
+          Tenta descobrir o produto
+          diretamente na URL final.
+          */
+
+          let idEncontrado =
+            encontrarId(linkFinal);
+
+          if (!idEncontrado) {
+
+            idEncontrado =
+              encontrarId(
+                resolvido.html
+              );
+          }
+
+          if (idEncontrado) {
+
+            console.log(
+              "ID encontrado após resolver meli.la:",
+              idEncontrado
+            );
+          }
+
+        } catch (erroLink) {
+
+          console.error(
+            "Erro ao resolver meli.la:",
+            erroLink
+          );
+
+          return res.status(400).json({
             error:
-              "O Mercado Livre não conseguiu localizar o produto do catálogo.",
+              "Não foi possível abrir o link de afiliado do Mercado Livre.",
+
             detalhe:
-              produto.message ||
-              produto.error ||
-              "Produto não encontrado."
+              erroLink.message
           });
+        }
       }
 
       /*
-      ===============================================
-      4. BUSCA ANÚNCIOS ASSOCIADOS
-      ===============================================
+      =================================================
+      2. PROCURA ID DE CATÁLOGO
+      =================================================
       */
 
-      let anuncios = [];
+      let idCatalogo =
+        extrairIdCatalogo(
+          linkFinal
+        );
 
-      try {
+      /*
+      Também tenta encontrar MLB
+      no HTML caso o redirecionamento
+      não deixe o ID diretamente na URL.
+      */
 
-        const respostaAnuncios =
+      if (!idCatalogo) {
+
+        try {
+
+          const pagina =
+            await resolverLink(
+              linkFinal
+            );
+
+          idCatalogo =
+            extrairIdCatalogo(
+              pagina.urlFinal
+            );
+
+          if (!idCatalogo) {
+
+            idCatalogo =
+              encontrarId(
+                pagina.urlFinal +
+                "\n" +
+                pagina.html
+              );
+          }
+
+        } catch (erroPagina) {
+
+          console.log(
+            "Não foi possível analisar a página final:",
+            erroPagina.message
+          );
+        }
+      }
+
+      console.log(
+        "Product ID de catálogo:",
+        idCatalogo
+      );
+
+      /*
+      =================================================
+      3. PRODUTO DE CATÁLOGO
+      =================================================
+      */
+
+      if (idCatalogo) {
+
+        const respostaProduto =
           await fetch(
-            `https://api.mercadolibre.com/products/${idCatalogo}/items`,
+            `https://api.mercadolibre.com/products/${idCatalogo}`,
             {
               headers: {
                 Authorization:
                   `Bearer ${accessToken}`,
+
                 Accept:
                   "application/json"
               }
             }
           );
 
-        const dadosAnuncios =
-          await respostaAnuncios.json();
+        const produto =
+          await respostaProduto.json();
 
         console.log(
-          "RESPOSTA PRODUCTS ITEMS:",
+          "RESPOSTA PRODUCTS:",
           {
             status:
-              respostaAnuncios.status,
+              respostaProduto.status,
+
             dados:
-              dadosAnuncios
+              produto
           }
         );
 
-        if (respostaAnuncios.ok) {
+        if (
+          !respostaProduto.ok
+        ) {
 
-          if (
-            Array.isArray(
-              dadosAnuncios
+          return res
+            .status(
+              respostaProduto.status
             )
-          ) {
+            .json({
+              error:
+                "O Mercado Livre não conseguiu localizar o produto do catálogo.",
 
-            anuncios =
-              dadosAnuncios;
-
-          } else if (
-            Array.isArray(
-              dadosAnuncios.results
-            )
-          ) {
-
-            anuncios =
-              dadosAnuncios.results;
-          }
+              detalhe:
+                produto.message ||
+                produto.error ||
+                "Produto não encontrado."
+            });
         }
 
-      } catch (erroAnuncios) {
+        /*
+        ===============================================
+        4. BUSCA ANÚNCIOS ASSOCIADOS
+        ===============================================
+        */
 
-        console.error(
-          "Erro ao buscar anúncios:",
-          erroAnuncios.message
-        );
-      }
-
-      console.log(
-        "Quantidade de anúncios encontrados:",
-        anuncios.length
-      );
-
-      /*
-      ===============================================
-      5. ESCOLHE O PRIMEIRO ANÚNCIO
-      ===============================================
-      */
-
-      const primeiro =
-        anuncios.length > 0
-          ? anuncios[0]
-          : null;
-
-      if (primeiro) {
-
-        console.log(
-          "PRIMEIRO ANÚNCIO ENCONTRADO:",
-          JSON.stringify(
-            primeiro,
-            null,
-            2
-          )
-        );
-      }
-
-      const idAnuncio =
-        primeiro?.item_id ||
-        primeiro?.id ||
-        null;
-
-      console.log(
-        "ID DO ANÚNCIO:",
-        idAnuncio
-      );
-
-      /*
-      ===============================================
-      6. PREÇO
-      ===============================================
-      */
-
-      let preco =
-        Number(
-          primeiro?.price || 0
-        );
-
-      let precoAnterior =
-        Number(
-          primeiro?.original_price || 0
-        );
-
-      /*
-      ===============================================
-      7. SE NECESSÁRIO, CONSULTA O ANÚNCIO
-      ===============================================
-      */
-
-      let anuncioCompleto = null;
-
-      if (idAnuncio) {
+        let anuncios = [];
 
         try {
 
-          const respostaItem =
+          const respostaAnuncios =
             await fetch(
-              `https://api.mercadolibre.com/items/${idAnuncio}`,
+              `https://api.mercadolibre.com/products/${idCatalogo}/items`,
               {
                 headers: {
                   Authorization:
                     `Bearer ${accessToken}`,
+
                   Accept:
                     "application/json"
                 }
               }
             );
 
-          const dadosItem =
-            await respostaItem.json();
+          const dadosAnuncios =
+            await respostaAnuncios.json();
 
           console.log(
-            "RESPOSTA ITEM:",
+            "RESPOSTA PRODUCTS ITEMS:",
             {
               status:
-                respostaItem.status,
+                respostaAnuncios.status,
+
               dados:
-                dadosItem
+                dadosAnuncios
             }
           );
 
-          if (respostaItem.ok) {
-
-            anuncioCompleto =
-              dadosItem;
-
-            if (
-              Number(dadosItem.price) > 0
-            ) {
-              preco =
-                Number(
-                  dadosItem.price
-                );
-            }
+          if (
+            respostaAnuncios.ok
+          ) {
 
             if (
-              Number(
-                dadosItem.original_price
-              ) > 0
+              Array.isArray(
+                dadosAnuncios
+              )
             ) {
-              precoAnterior =
-                Number(
-                  dadosItem.original_price
-                );
+
+              anuncios =
+                dadosAnuncios;
+
+            } else if (
+              Array.isArray(
+                dadosAnuncios.results
+              )
+            ) {
+
+              anuncios =
+                dadosAnuncios.results;
             }
           }
 
-        } catch (erroItem) {
+        } catch (
+          erroAnuncios
+        ) {
 
-          console.log(
-            "Não foi possível consultar o anúncio completo:",
-            erroItem.message
+          console.error(
+            "Erro ao buscar anúncios:",
+            erroAnuncios.message
           );
         }
+
+        console.log(
+          "Quantidade de anúncios encontrados:",
+          anuncios.length
+        );
+
+        /*
+        ===============================================
+        5. ESCOLHE O PRIMEIRO ANÚNCIO
+        ===============================================
+        */
+
+        const primeiro =
+          anuncios.length > 0
+            ? anuncios[0]
+            : null;
+
+        if (primeiro) {
+
+          console.log(
+            "PRIMEIRO ANÚNCIO ENCONTRADO:",
+            JSON.stringify(
+              primeiro,
+              null,
+              2
+            )
+          );
+        }
+
+        const idAnuncio =
+          primeiro?.item_id ||
+          primeiro?.id ||
+          null;
+
+        console.log(
+          "ID DO ANÚNCIO:",
+          idAnuncio
+        );
+
+        /*
+        ===============================================
+        6. PREÇO
+        ===============================================
+        */
+
+        let preco =
+          Number(
+            primeiro?.price || 0
+          );
+
+        let precoAnterior =
+          Number(
+            primeiro?.original_price || 0
+          );
+
+        /*
+        ===============================================
+        7. CONSULTA ANÚNCIO COMPLETO
+        ===============================================
+        */
+
+        let anuncioCompleto =
+          null;
+
+        if (idAnuncio) {
+
+          try {
+
+            const respostaItem =
+              await fetch(
+                `https://api.mercadolibre.com/items/${idAnuncio}`,
+                {
+                  headers: {
+                    Authorization:
+                      `Bearer ${accessToken}`,
+
+                    Accept:
+                      "application/json"
+                  }
+                }
+              );
+
+            const dadosItem =
+              await respostaItem.json();
+
+            console.log(
+              "RESPOSTA ITEM:",
+              {
+                status:
+                  respostaItem.status,
+
+                dados:
+                  dadosItem
+              }
+            );
+
+            if (
+              respostaItem.ok
+            ) {
+
+              anuncioCompleto =
+                dadosItem;
+
+              if (
+                Number(
+                  dadosItem.price
+                ) > 0
+              ) {
+
+                preco =
+                  Number(
+                    dadosItem.price
+                  );
+              }
+
+              if (
+                Number(
+                  dadosItem.original_price
+                ) > 0
+              ) {
+
+                precoAnterior =
+                  Number(
+                    dadosItem.original_price
+                  );
+              }
+            }
+
+          } catch (
+            erroItem
+          ) {
+
+            console.log(
+              "Não foi possível consultar o anúncio completo:",
+              erroItem.message
+            );
+          }
+        }
+
+        /*
+        ===============================================
+        8. TÍTULO
+        ===============================================
+        */
+
+        const titulo =
+          produto.name ||
+          produto.title ||
+          "Produto do Mercado Livre";
+
+        /*
+        ===============================================
+        9. IMAGEM
+        ===============================================
+        */
+
+        let imagem = "";
+
+        if (
+          Array.isArray(
+            produto.pictures
+          ) &&
+          produto.pictures.length > 0
+        ) {
+
+          imagem =
+            produto.pictures[0].url ||
+            produto.pictures[0].secure_url ||
+            "";
+        }
+
+        if (
+          !imagem &&
+          anuncioCompleto
+        ) {
+
+          imagem =
+            anuncioCompleto
+              .pictures?.[0]?.url ||
+            anuncioCompleto.thumbnail ||
+            "";
+        }
+
+        /*
+        ===============================================
+        10. DESCONTO
+        ===============================================
+        */
+
+        const desconto =
+          precoAnterior > preco &&
+          preco > 0
+            ? Math.round(
+                (
+                  1 -
+                  preco /
+                    precoAnterior
+                ) * 100
+              )
+            : 0;
+
+        console.log(
+          "DADOS FINAIS DO PRODUTO:",
+          {
+            id:
+              idAnuncio ||
+              idCatalogo,
+
+            titulo,
+
+            preco,
+
+            precoAnterior,
+
+            desconto
+          }
+        );
+
+        return res.json({
+
+          id:
+            idAnuncio ||
+            idCatalogo,
+
+          titulo,
+
+          imagem,
+
+          preco,
+
+          precoAnterior:
+            precoAnterior > preco
+              ? precoAnterior
+              : null,
+
+          desconto,
+
+          linkAfiliado:
+            linkOriginal,
+
+          /*
+          Mantém exatamente o link
+          enviado pelo usuário.
+          */
+
+          linkFinal:
+            linkOriginal
+        });
       }
 
       /*
-      ===============================================
-      8. TÍTULO
-      ===============================================
+      =================================================
+      11. ANÚNCIO NORMAL MLB...
+      =================================================
       */
 
-      const titulo =
-        produto.name ||
-        produto.title ||
-        "Produto do Mercado Livre";
+      const idProduto =
+        encontrarId(
+          linkFinal
+        );
 
-      /*
-      ===============================================
-      9. IMAGEM
-      ===============================================
-      */
+      console.log(
+        "ID DO ANÚNCIO IDENTIFICADO:",
+        idProduto
+      );
 
-      let imagem = "";
+      if (!idProduto) {
 
-      if (
-        Array.isArray(
-          produto.pictures
-        ) &&
-        produto.pictures.length > 0
-      ) {
-
-        imagem =
-          produto.pictures[0].url ||
-          produto.pictures[0].secure_url ||
-          "";
+        return res.status(422).json({
+          error:
+            "Não consegui identificar o produto nesse link."
+        });
       }
 
-      if (
-        !imagem &&
-        anuncioCompleto
-      ) {
+      const resposta =
+        await fetch(
+          `https://api.mercadolibre.com/items/${idProduto}`,
+          {
+            headers: {
+              Authorization:
+                `Bearer ${accessToken}`,
 
-        imagem =
-          anuncioCompleto.pictures?.[0]?.url ||
-          anuncioCompleto.thumbnail ||
-          "";
+              Accept:
+                "application/json"
+            }
+          }
+        );
+
+      const dados =
+        await resposta.json();
+
+      console.log(
+        "RESPOSTA COMPLETA API MERCADO LIVRE:",
+        {
+          status:
+            resposta.status,
+
+          dados
+        }
+      );
+
+      if (!resposta.ok) {
+
+        return res
+          .status(
+            resposta.status
+          )
+          .json({
+            error:
+              "O Mercado Livre não conseguiu localizar esse anúncio.",
+
+            detalhe:
+              dados.message ||
+              dados.error ||
+              "Erro desconhecido"
+          });
       }
 
-      /*
-      ===============================================
-      10. DESCONTO
-      ===============================================
-      */
+      const preco =
+        Number(
+          dados.price || 0
+        );
+
+      const precoAnterior =
+        Number(
+          dados.original_price || 0
+        );
 
       const desconto =
         precoAnterior > preco &&
@@ -638,26 +985,19 @@ app.post("/api/product", async (req, res) => {
             )
           : 0;
 
-      console.log(
-        "DADOS FINAIS DO PRODUTO:",
-        {
-          id:
-            idAnuncio ||
-            idCatalogo,
-          titulo,
-          preco,
-          precoAnterior,
-          desconto
-        }
-      );
+      const imagem =
+        dados.pictures?.[0]?.url ||
+        dados.thumbnail ||
+        "";
 
       return res.json({
 
         id:
-          idAnuncio ||
-          idCatalogo,
+          dados.id,
 
-        titulo,
+        titulo:
+          dados.title ||
+          "Produto do Mercado Livre",
 
         imagem,
 
@@ -673,146 +1013,27 @@ app.post("/api/product", async (req, res) => {
         linkAfiliado:
           linkOriginal,
 
-        /*
-        Mantém o link que o usuário enviou.
-        Isso é importante para não perder o
-        link de afiliado.
-        */
         linkFinal:
           linkOriginal
       });
-    }
 
-    /*
-    =================================================
-    11. ANÚNCIO NORMAL MLB...
-    =================================================
-    */
+    } catch (erro) {
 
-    const idProduto =
-      encontrarId(linkFinal);
+      console.error(
+        "ERRO API PRODUTO:",
+        erro
+      );
 
-    console.log(
-      "ID DO ANÚNCIO IDENTIFICADO:",
-      idProduto
-    );
-
-    if (!idProduto) {
-
-      return res.status(422).json({
+      return res.status(500).json({
         error:
-          "Não consegui identificar o produto nesse link."
+          "Não foi possível consultar o produto.",
+
+        detalhe:
+          erro.message
       });
     }
-
-    const resposta =
-      await fetch(
-        `https://api.mercadolibre.com/items/${idProduto}`,
-        {
-          headers: {
-            Authorization:
-              `Bearer ${accessToken}`,
-            Accept:
-              "application/json"
-          }
-        }
-      );
-
-    const dados =
-      await resposta.json();
-
-    console.log(
-      "RESPOSTA COMPLETA API MERCADO LIVRE:",
-      {
-        status:
-          resposta.status,
-        dados
-      }
-    );
-
-    if (!resposta.ok) {
-
-      return res
-        .status(resposta.status)
-        .json({
-          error:
-            "O Mercado Livre não conseguiu localizar esse anúncio.",
-          detalhe:
-            dados.message ||
-            dados.error ||
-            "Erro desconhecido"
-        });
-    }
-
-    const preco =
-      Number(
-        dados.price || 0
-      );
-
-    const precoAnterior =
-      Number(
-        dados.original_price || 0
-      );
-
-    const desconto =
-      precoAnterior > preco &&
-      preco > 0
-        ? Math.round(
-            (
-              1 -
-              preco /
-                precoAnterior
-            ) * 100
-          )
-        : 0;
-
-    const imagem =
-      dados.pictures?.[0]?.url ||
-      dados.thumbnail ||
-      "";
-
-    return res.json({
-
-      id:
-        dados.id,
-
-      titulo:
-        dados.title ||
-        "Produto do Mercado Livre",
-
-      imagem,
-
-      preco,
-
-      precoAnterior:
-        precoAnterior > preco
-          ? precoAnterior
-          : null,
-
-      desconto,
-
-      linkAfiliado:
-        linkOriginal,
-
-      linkFinal:
-        linkOriginal
-    });
-
-  } catch (erro) {
-
-    console.error(
-      "ERRO API PRODUTO:",
-      erro
-    );
-
-    return res.status(500).json({
-      error:
-        "Não foi possível consultar o produto.",
-      detalhe:
-        erro.message
-    });
   }
-});
+);
 
 /*
 =====================================================
@@ -820,16 +1041,22 @@ SAÚDE
 =====================================================
 */
 
-app.get("/health", (req, res) => {
+app.get(
+  "/health",
+  (req, res) => {
 
-  res.json({
-    status: "OK",
-    ofertaco: "online",
-    mercadoLivre:
-      !!accessToken
-  });
+    res.json({
+      status: "OK",
 
-});
+      ofertaco:
+        "online",
+
+      mercadoLivre:
+        !!accessToken
+    });
+
+  }
+);
 
 /*
 =====================================================
@@ -847,4 +1074,4 @@ app.listen(
     );
 
   }
-);
+);;
