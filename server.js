@@ -361,6 +361,44 @@ function encontrarTodosUserProducts(texto) {
 
 /*
 =====================================================
+ENCONTRAR SELLER IDs
+=====================================================
+*/
+
+function encontrarSellerIds(texto) {
+  const valor = String(texto || "");
+
+  const resultados = [];
+
+  const padroes = [
+    /"seller_id"\s*:\s*(\d+)/gi,
+    /"sellerId"\s*:\s*(\d+)/gi,
+    /"user_id"\s*:\s*(\d+)/gi,
+    /"userId"\s*:\s*(\d+)/gi,
+    /\/users\/(\d+)\/items\/search/gi
+  ];
+
+  for (const regex of padroes) {
+    let resultado;
+
+    while (
+      (resultado = regex.exec(valor)) !== null
+    ) {
+      if (resultado[1]) {
+        resultados.push(
+          String(resultado[1])
+        );
+      }
+    }
+  }
+
+  return [
+    ...new Set(resultados)
+  ];
+}
+
+/*
+=====================================================
 EXTRAIR CATÁLOGO
 =====================================================
 */
@@ -547,14 +585,12 @@ async function consultarAnuncio(idProduto) {
         dados?.id,
 
       titulo:
-        dados?.title
+        dados?.title,
+
+      seller_id:
+        dados?.seller_id
     }
   );
-
-  /*
-  Se o token for recusado,
-  tenta consulta pública.
-  */
 
   if (
     resposta.status === 401 ||
@@ -589,7 +625,10 @@ async function consultarAnuncio(idProduto) {
             dados?.id,
 
           titulo:
-            dados?.title
+            dados?.title,
+
+          seller_id:
+            dados?.seller_id
         }
       );
 
@@ -610,14 +649,6 @@ async function consultarAnuncio(idProduto) {
 /*
 =====================================================
 CONSULTAR USER PRODUCT
-=====================================================
-
-IMPORTANTE:
-
-O Mercado Livre pode devolver 403 aqui.
-
-Isso NÃO deve interromper o processamento.
-
 =====================================================
 */
 
@@ -683,10 +714,6 @@ async function consultarUserProduct(
 =====================================================
 BUSCAR ANÚNCIOS PELO USER PRODUCT
 =====================================================
-
-Essa é a rota oficial documentada pelo Mercado Livre.
-
-=====================================================
 */
 
 async function buscarAnunciosDoUserProduct(
@@ -735,11 +762,21 @@ async function buscarAnunciosDoUserProduct(
         status:
           resposta.status,
 
-        dados
+        seller_id:
+          dados?.seller_id,
+
+        resultados:
+          dados?.results
       }
     );
 
     if (!resposta.ok) {
+      console.log(
+        "Busca do MLBU falhou:",
+        resposta.status,
+        dados
+      );
+
       return [];
     }
 
@@ -813,6 +850,7 @@ function montarDadosAnuncio(
 
   const imagem =
     dados.pictures?.[0]?.url ||
+    dados.pictures?.[0]?.secure_url ||
     dados.thumbnail ||
     "";
 
@@ -920,6 +958,96 @@ async function tentarMLBs(
     } catch (erro) {
       console.log(
         `Erro consultando ${idProduto}:`,
+        erro.message
+      );
+    }
+  }
+
+  return null;
+}
+
+/*
+=====================================================
+DESCOBRIR SELLER ID
+=====================================================
+*/
+
+async function tentarDescobrirSellerId(
+  linkFinal,
+  htmlResolvido,
+  dadosUP
+) {
+  const sellerDireto =
+    dadosUP?.user_id ||
+    dadosUP?.seller_id ||
+    dadosUP?.user?.id ||
+    dadosUP?.seller?.id ||
+    null;
+
+  if (sellerDireto) {
+    console.log(
+      "SELLER ID ENCONTRADO NO USER PRODUCT:",
+      sellerDireto
+    );
+
+    return String(sellerDireto);
+  }
+
+  const texto =
+    [
+      linkFinal,
+      htmlResolvido,
+      JSON.stringify(dadosUP || {})
+    ].join("\n");
+
+  const sellers =
+    encontrarSellerIds(
+      texto
+    );
+
+  if (sellers.length > 0) {
+    console.log(
+      "SELLER IDs ENCONTRADOS:",
+      sellers
+    );
+
+    return sellers[0];
+  }
+
+  const mlbs =
+    encontrarTodosIds(
+      texto
+    );
+
+  if (mlbs.length > 0) {
+    console.log(
+      "Tentando descobrir seller através do MLB:",
+      mlbs[0]
+    );
+
+    try {
+      const resultado =
+        await consultarAnuncio(
+          mlbs[0]
+        );
+
+      const seller =
+        resultado.dados?.seller_id ||
+        resultado.dados?.seller?.id ||
+        null;
+
+      if (seller) {
+        console.log(
+          "SELLER ID DESCOBERTO PELO MLB:",
+          seller
+        );
+
+        return String(seller);
+      }
+
+    } catch (erro) {
+      console.log(
+        "Não foi possível descobrir seller pelo MLB:",
         erro.message
       );
     }
@@ -1239,6 +1367,7 @@ app.post(
 
       const textoInicial =
         [
+          linkOriginal,
           linkFinal,
           htmlResolvido
         ].join("\n");
@@ -1267,22 +1396,17 @@ app.post(
           idUserProduct
         );
 
-        /*
-        Primeiro tenta consultar o User Product.
-        Se retornar 403, simplesmente continua.
-        */
-
         const resultadoUP =
           await consultarUserProduct(
             idUserProduct
           );
 
-        let dadosUP =
+        const dadosUP =
           resultadoUP.dados || {};
 
         /*
-        Procura qualquer MLB que tenha vindo
-        dentro da resposta do User Product.
+        Tenta MLBs encontrados na resposta
+        do User Product.
         */
 
         const mlbsNoUP =
@@ -1308,27 +1432,24 @@ app.post(
         }
 
         /*
-        =================================================
-        5. DESCOBRIR SELLER ID
-        =================================================
+        Descobre o seller.
         */
 
         const sellerId =
-          dadosUP.user_id ||
-          dadosUP.seller_id ||
-          dadosUP.user?.id ||
-          dadosUP.seller?.id ||
-          null;
+          await tentarDescobrirSellerId(
+            linkFinal,
+            htmlResolvido,
+            dadosUP
+          );
 
         console.log(
-          "SELLER ID ENCONTRADO:",
+          "SELLER ID FINAL:",
           sellerId
         );
 
         /*
-        Se o endpoint de User Product retornou
-        403, pode não existir seller_id.
-        Nesse caso não podemos fazer essa busca.
+        Busca oficialmente os MLBs
+        associados ao MLBU.
         */
 
         if (sellerId) {
@@ -1356,14 +1477,14 @@ app.post(
           }
         } else {
           console.log(
-            "Não foi possível obter seller_id através do User Product."
+            "Não foi possível obter seller_id."
           );
         }
       }
 
       /*
       =================================================
-      6. CATÁLOGO
+      5. CATÁLOGO
       =================================================
       */
 
@@ -1492,11 +1613,6 @@ app.post(
               }
             }
 
-            /*
-            Mesmo que não consigamos o item,
-            tentamos montar informações do produto.
-            */
-
             const preco =
               Number(
                 primeiro?.price || 0
@@ -1570,7 +1686,7 @@ app.post(
 
       /*
       =================================================
-      7. PROCURAR MLB EM TODO O HTML
+      6. PROCURAR MLB NO HTML
       =================================================
       */
 
@@ -1605,7 +1721,7 @@ app.post(
 
       /*
       =================================================
-      8. ERRO FINAL
+      7. ERRO FINAL
       =================================================
       */
 
@@ -1617,7 +1733,7 @@ app.post(
             "O link contém um User Product do Mercado Livre, mas não foi possível localizar o anúncio MLB correspondente.",
 
           detalhe:
-            "O Mercado Livre identificou o MLBU, porém o acesso ao User Product ou a busca do anúncio associado não retornou um MLB utilizável."
+            "O Mercado Livre identificou o MLBU, porém não foi possível localizar um anúncio MLB utilizável."
         });
       }
 
